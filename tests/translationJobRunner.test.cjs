@@ -8,6 +8,8 @@ class MockTranslationJobRunner {
     this.activeJob = null;
     this.controller = null;
     this.listeners = new Set();
+    this.isCancelledAll = false;
+    this.runningPromise = null;
   }
 
   enqueue(fileId) {
@@ -34,9 +36,20 @@ class MockTranslationJobRunner {
     }
   }
 
+  cancelActive() {
+    this.abortActive('cancelled');
+  }
+
+  cancelAll() {
+    this.isCancelledAll = true;
+    this.abortActive('cancelled');
+    const pending = this.queue.splice(0);
+    pending.forEach(job => this.finish(job, 'cancelled'));
+  }
+
   abortFile(fileId) {
     if (this.activeJob?.fileId === fileId) {
-      this.abortActive('cancelled');
+      this.cancelActive();
     } else {
       this.dequeue(fileId);
     }
@@ -60,32 +73,57 @@ class MockTranslationJobRunner {
     this.listeners.forEach(l => l({ ...job }));
   }
 
-  async run() {
-    while (this.queue.length > 0) {
-      const job = this.queue.shift();
-      this.activeJob = job;
-      this.controller = { signal: { aborted: false }, abort: () => { this.controller.signal.aborted = true; } };
-      job.status = 'running';
-      job.startedAt = new Date().toISOString();
-      this.emit(job);
+  getQueueLength() {
+    return this.queue.length;
+  }
 
+  async run() {
+    if (this.runningPromise) return this.runningPromise;
+
+    this.isCancelledAll = false;
+    this.runningPromise = (async () => {
       try {
-        await this.handler(job, this.controller.signal);
-        if (job.status === 'running') this.finish(job, 'completed');
-      } catch (error) {
-        if (this.controller.signal.aborted) {
-          if (job.status === 'running') this.finish(job, 'cancelled');
-        } else {
-          job.error = error?.message || String(error);
-          this.finish(job, 'failed');
+        while (this.queue.length > 0) {
+          const job = this.queue.shift();
+          this.activeJob = job;
+          const signal = {
+            aborted: false,
+            onabort: null
+          };
+          this.controller = {
+            signal,
+            abort: () => {
+              signal.aborted = true;
+              if (typeof signal.onabort === 'function') signal.onabort();
+            }
+          };
+          job.status = 'running';
+          job.startedAt = new Date().toISOString();
+          this.emit(job);
+
+          try {
+            await this.handler(job, this.controller.signal);
+            if (job.status === 'running') this.finish(job, 'completed');
+          } catch (error) {
+            if (this.controller.signal.aborted) {
+              if (job.status === 'running') this.finish(job, 'cancelled');
+            } else {
+              job.error = error?.message || String(error);
+              this.finish(job, 'failed');
+            }
+          } finally {
+            this.activeJob = null;
+            this.controller = null;
+          }
+
+          if (job.status === 'paused' || this.isCancelledAll) break;
         }
       } finally {
-        this.activeJob = null;
-        this.controller = null;
+        this.runningPromise = null;
       }
+    })();
 
-      if (job.status === 'paused' || job.status === 'cancelled') break;
-    }
+    return this.runningPromise;
   }
 }
 
@@ -151,7 +189,160 @@ async function testDequeueAndAbort() {
   console.log('PASS dequeue cleanly removes a file from the active translation queue');
 }
 
+async function testCancelActiveJobContinuesQueueImmediately() {
+  const processedOrder = [];
+  let runner;
+
+  runner = new MockTranslationJobRunner(async (job, signal) => {
+    processedOrder.push(`start_${job.fileId}`);
+
+    if (job.fileId === 'file1') {
+      // Simulate cancelling the active job halfway through
+      setTimeout(() => {
+        runner.cancelActive();
+      }, 10);
+    }
+
+    // Wait until signal is aborted or delay finishes
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 30);
+      signal.onabort = () => {
+        clearTimeout(timer);
+        processedOrder.push(`aborted_${job.fileId}`);
+        resolve();
+      };
+      if (signal.aborted) {
+        clearTimeout(timer);
+        processedOrder.push(`aborted_${job.fileId}`);
+        resolve();
+      }
+    });
+
+    if (!signal.aborted) {
+      processedOrder.push(`finish_${job.fileId}`);
+    }
+  });
+
+  runner.enqueue('file1');
+  runner.enqueue('file2'); // Added later or already queued
+
+  await runner.run();
+
+  assert.deepStrictEqual(
+    processedOrder,
+    [
+      'start_file1',
+      'aborted_file1',
+      'start_file2',
+      'finish_file2'
+    ],
+    'Cancelling current active translation must not stop queue; next files must start automatically'
+  );
+
+  console.log('PASS cancelling active process immediately and automatically starts the next queued file');
+}
+
+async function testDeleteActiveFileContinuesQueueImmediately() {
+  const processedOrder = [];
+  let runner;
+
+  runner = new MockTranslationJobRunner(async (job, signal) => {
+    processedOrder.push(`start_${job.fileId}`);
+
+    if (job.fileId === 'file1') {
+      // User deletes file1 while it is being translated
+      setTimeout(() => {
+        runner.abortFile('file1');
+      }, 10);
+    }
+
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 30);
+      signal.onabort = () => {
+        clearTimeout(timer);
+        processedOrder.push(`deleted_${job.fileId}`);
+        resolve();
+      };
+      if (signal.aborted) {
+        clearTimeout(timer);
+        processedOrder.push(`deleted_${job.fileId}`);
+        resolve();
+      }
+    });
+
+    if (!signal.aborted) {
+      processedOrder.push(`finish_${job.fileId}`);
+    }
+  });
+
+  runner.enqueue('file1');
+  runner.enqueue('file2');
+
+  await runner.run();
+
+  assert.deepStrictEqual(
+    processedOrder,
+    [
+      'start_file1',
+      'deleted_file1',
+      'start_file2',
+      'finish_file2'
+    ],
+    'Deleting active file must not stop queue; next files must start automatically'
+  );
+
+  console.log('PASS deleting a file being translated immediately and automatically starts the next file');
+}
+
+async function testCancelAllStopsEntireQueue() {
+  const processedOrder = [];
+  let runner;
+
+  runner = new MockTranslationJobRunner(async (job, signal) => {
+    processedOrder.push(`start_${job.fileId}`);
+
+    if (job.fileId === 'file1') {
+      setTimeout(() => {
+        runner.cancelAll();
+      }, 10);
+    }
+
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 30);
+      signal.onabort = () => {
+        clearTimeout(timer);
+        processedOrder.push(`cancelled_${job.fileId}`);
+        resolve();
+      };
+      if (signal.aborted) {
+        clearTimeout(timer);
+        processedOrder.push(`cancelled_${job.fileId}`);
+        resolve();
+      }
+    });
+  });
+
+  runner.enqueue('file1');
+  runner.enqueue('file2');
+
+  await runner.run();
+
+  assert.deepStrictEqual(
+    processedOrder,
+    [
+      'start_file1',
+      'cancelled_file1'
+    ],
+    'cancelAll must cleanly cancel everything and not start subsequent files'
+  );
+
+  console.log('PASS cancelAll cleanly stops the entire batch queue');
+}
+
 (async () => {
   await testDynamicQueueDuringTranslation();
   await testDequeueAndAbort();
+  await testCancelActiveJobContinuesQueueImmediately();
+  await testDeleteActiveFileContinuesQueueImmediately();
+  await testCancelAllStopsEntireQueue();
 })();

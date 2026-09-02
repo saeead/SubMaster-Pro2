@@ -48,11 +48,6 @@ export const SettingsCombobox = <T extends string>({
           {icon && <span className="text-primary">{icon}</span>}
           <span>{label}</span>
         </label>
-        {selected?.badge && (
-          <span className="rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
-            {selected.badge}
-          </span>
-        )}
       </div>
 
       <div className="relative">
@@ -62,8 +57,8 @@ export const SettingsCombobox = <T extends string>({
           aria-expanded={open}
           aria-controls={listId}
           onClick={() => setOpen(current => !current)}
-          className={`group flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border bg-surface/60 px-3.5 py-2 text-right text-sm text-text shadow-sm backdrop-blur-md transition-all duration-200 hover:border-primary/50 hover:bg-surface/90 hover:shadow focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-[0.995] ${
-            open ? 'border-primary ring-2 ring-primary/20 bg-surface' : 'border-[#1e2a5e]'
+          className={`group flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-right text-sm text-text shadow-xs backdrop-blur-md transition-all duration-200 hover:border-[#2e4085] hover:bg-surface/90 focus:outline-none focus:ring-1 focus:ring-[#2e4085] active:scale-[0.995] ${
+            open ? 'border-[#334794] bg-surface' : 'border-[#1e2a5e] bg-surface/60'
           }`}
         >
           <div className="min-w-0 flex-1">
@@ -89,7 +84,7 @@ export const SettingsCombobox = <T extends string>({
             id={listId}
             role="listbox"
             aria-label={label}
-            className="absolute z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-[#1e2a5e] bg-[var(--bg-elevated)] p-1.5 shadow-2xl ring-1 ring-black/10 backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 duration-150"
+            className="absolute z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-[#1e2a5e] bg-[var(--bg-elevated)] p-1.5 shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 duration-150"
           >
             {options.map(option => {
               const isSelected = option.value === value;
@@ -103,8 +98,8 @@ export const SettingsCombobox = <T extends string>({
                     }}
                     className={`group/opt flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2.5 text-right text-sm transition-all duration-150 ${
                       isSelected
-                        ? 'border border-primary/30 bg-primary/15 font-semibold text-text shadow-xs'
-                        : 'text-text-muted hover:bg-surfaceHighlight hover:text-text'
+                        ? 'border border-[#2a3b7d] bg-[#1e2a5e]/70 font-semibold text-text shadow-xs'
+                        : 'border border-transparent text-text-muted hover:border-[#1e2a5e] hover:bg-surfaceHighlight hover:text-text'
                     }`}
                   >
                     <div className="min-w-0 flex-1">
@@ -112,17 +107,6 @@ export const SettingsCombobox = <T extends string>({
                         <span className={`block truncate ${isSelected ? 'text-text font-bold' : ''}`}>
                           {option.label}
                         </span>
-                        {option.badge && (
-                          <span
-                            className={`rounded px-1.5 py-0.2 font-mono text-[10px] ${
-                              isSelected
-                                ? 'bg-primary/25 text-primary font-bold'
-                                : 'bg-surfaceHighlight text-text-muted group-hover/opt:text-text'
-                            }`}
-                          >
-                            {option.badge}
-                          </span>
-                        )}
                       </div>
                       {option.description && (
                         <span className="mt-0.5 block text-[11px] leading-tight text-text-muted/80">

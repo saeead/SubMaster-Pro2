@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { SubtitleFile, AppStatus, NetflixError, TranslationMethod } from '../types';
-import { Play, Pause, Download, FileText, Clock, Hash, Timer, HardDrive, Trash2, XCircle, RefreshCw, Settings2, Wand2, Archive, Save, FileJson, Sparkles } from 'lucide-react';
+import { Play, Pause, Download, FileText, Clock, Hash, Timer, HardDrive, Trash2, XCircle, RefreshCw, Settings2, Wand2, Archive, Save, FileJson, Sparkles, SkipForward } from 'lucide-react';
 import { HelpTooltip } from './HelpTooltip';
 
 interface StatsCardProps {
@@ -14,6 +14,9 @@ interface StatsCardProps {
   onStart: () => void;
   onPause: () => void;
   onCancel: () => void;
+  onCancelCurrent?: () => void;
+  onCancelAll?: () => void;
+  hasQueuedFiles?: boolean;
   onDownload: () => void;
   onDownloadZip: () => void;
   onNewProject: () => void;
@@ -33,6 +36,9 @@ export const StatsCard: React.FC<StatsCardProps> = ({
   onStart, 
   onPause, 
   onCancel,
+  onCancelCurrent,
+  onCancelAll,
+  hasQueuedFiles,
   onDownload,
   onDownloadZip,
   onNewProject,
@@ -342,13 +348,37 @@ export const StatsCard: React.FC<StatsCardProps> = ({
 
              {/* Cancel */}
              {(isProcessing || isPaused) && (
+               (hasQueuedFiles || totalFiles > 1) ? (
+                 <>
+                   <button 
+                      type="button"
+                      onClick={onCancelCurrent || onCancel}
+                      className="w-full md:w-auto flex-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-bold py-3 px-4 rounded-xl border border-amber-500/25 transition-all flex items-center justify-center gap-2"
+                      title="لغو ترجمه فایل فعلی؛ ترجمه فایل بعدی در صف بلافاصله و خودکار آغاز می‌شود"
+                   >
+                      <SkipForward className="w-5 h-5" />
+                      <span>لغو فایل جاری (شروع بعدی)</span>
+                   </button>
+                   <button 
+                      type="button"
+                      onClick={onCancelAll || onCancel}
+                      className="w-full md:w-auto flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold py-3 px-4 rounded-xl border border-red-500/20 transition-all flex items-center justify-center gap-2"
+                      title="توقف و لغو کامل تمام فایل‌های صف"
+                   >
+                      <XCircle className="w-5 h-5" />
+                      <span>لغو کل صف</span>
+                   </button>
+                 </>
+               ) : (
                  <button 
+                    type="button"
                     onClick={onCancel}
                     className="w-full md:w-1/3 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold py-3 px-6 rounded-xl border border-red-500/20 transition-all flex items-center justify-center gap-2"
                  >
                     <XCircle className="w-5 h-5" />
-                    لغو
+                    <span>لغو</span>
                  </button>
+               )
              )}
 
              {/* Download Output */}

@@ -74,6 +74,7 @@ const App: React.FC = () => {
   const filesRef = useRef<SubtitleFile[]>([]);
   const isTranslatingRef = useRef<boolean>(false);
   const isPausedRef = useRef<boolean>(false); 
+  const autoPipelineActiveRef = useRef<boolean>(false);
   const settingsRef = useRef<AppSettings>(settings);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const jobRunnerRef = useRef<TranslationJobRunner | null>(null);
@@ -211,6 +212,7 @@ const App: React.FC = () => {
 
   const handleFilesLoaded = (loadedFiles: { blocks: SubtitleBlock[], filename: string, type: 'SRT' | 'VTT' | 'ASS', size: number }[]) => {
     const isCurrentlyTranslating = isTranslatingRef.current;
+    const isAutoPipelineActive = autoPipelineActiveRef.current;
 
     const newFiles: SubtitleFile[] = loadedFiles.map(f => ({
       id: crypto.randomUUID(),
@@ -221,7 +223,7 @@ const App: React.FC = () => {
       blocks: f.blocks,
       status: AppStatus.READY,
       progress: 0,
-      progressMessage: isCurrentlyTranslating ? 'در صف ترجمه...' : undefined,
+      progressMessage: (isCurrentlyTranslating || isAutoPipelineActive) ? 'در صف ترجمه...' : undefined,
       diagnostic: null,
       processedCount: 0,
       activeTranslationBlockIds: [],
@@ -246,10 +248,20 @@ const App: React.FC = () => {
       });
       showToast(
         newFiles.length === 1 
-          ? `فایل "${newFiles[0].name}" به صف پردازش فعلی افزوده شد و پس از فایل‌های قبلی ترجمه می‌شود.`
+          ? `فایل "${newFiles[0].name}" به صف پردازش فعلی افزوده شد و پس از فایل‌های قبلی به صورت خودکار ترجمه می‌شود.`
           : `${newFiles.length} فایل جدید به صف پردازش فعلی افزوده شدند و به صورت خودکار ترجمه می‌شوند.`, 
         'info'
       );
+    } else if (isAutoPipelineActive) {
+      showToast(
+        newFiles.length === 1
+          ? `فایل "${newFiles[0].name}" به پروژه افزوده شد؛ ترجمه خودکار آغاز می‌شود...`
+          : `${newFiles.length} فایل جدید به پروژه افزوده شدند؛ ترجمه خودکار آغاز می‌شود...`,
+        'info'
+      );
+      setTimeout(() => {
+        startBatchTranslation();
+      }, 80);
     } else {
       setToast([]);
     }
@@ -332,6 +344,8 @@ const App: React.FC = () => {
   const resetProject = () => {
     files.forEach(f => ProjectStateManager.deleteProjectState(f.id));
     
+    autoPipelineActiveRef.current = false;
+    jobRunnerRef.current?.cancelAll();
     setFiles([]);
     setActiveFileId(null);
     setToast([]);
@@ -1081,14 +1095,14 @@ const App: React.FC = () => {
 
      for (let i = startChunkIndex; i < totalChunks; i++) {
         // Critical: Check if stopped. If stopped via Pause, don't set to Cancelled.
-        if (!isTranslatingRef.current) {
+        if (signal?.aborted || !isTranslatingRef.current) {
             if (isPausedRef.current) {
                 // Stopped because of Pause
                 updateFileStatus(fileId, { status: AppStatus.PAUSED, progressMessage: 'توقف موقت (ذخیره شد)', activeTranslationBlockIds: [] });
                 return;
             } else {
                 // Stopped because of Cancel
-                updateFileStatus(fileId, { status: AppStatus.CANCELLED, progressMessage: 'لغو شده' });
+                updateFileStatus(fileId, { status: AppStatus.CANCELLED, progressMessage: 'لغو شده', activeTranslationBlockIds: [] });
                 return;
             }
         }
@@ -1335,6 +1349,7 @@ const App: React.FC = () => {
         }
     }
 
+    autoPipelineActiveRef.current = true;
     isTranslatingRef.current = true;
     isPausedRef.current = false; 
     setCompletionToast(false);
@@ -1355,13 +1370,14 @@ const App: React.FC = () => {
 
     try {
         await runner.run();
-        stoppedEarly = runner.getSnapshot().some(job => job.status === 'paused' || job.status === 'cancelled');
+        stoppedEarly = runner.getSnapshot().some(job => job.status === 'paused') || runner.getCancelledAll();
     } catch (e) {
         console.error("Batch Queue Error", e);
     } finally {
         jobRunnerRef.current = null;
         isTranslatingRef.current = false;
-        if (!stoppedEarly) {
+        if (!stoppedEarly && !runner.getCancelledAll()) {
+            autoPipelineActiveRef.current = false;
             setCompletionToast(true); 
         }
     }
@@ -1370,6 +1386,7 @@ const App: React.FC = () => {
   const pauseTranslation = () => {
     isTranslatingRef.current = false;
     isPausedRef.current = true; 
+    autoPipelineActiveRef.current = false;
     jobRunnerRef.current?.pauseActive();
     
     setFiles(prev => prev.map(f => f.status === AppStatus.TRANSLATING ? { ...f, status: AppStatus.PAUSED, progressMessage: 'توقف موقت', activeTranslationBlockIds: [] } : f));
@@ -1377,15 +1394,65 @@ const App: React.FC = () => {
     showToast('پروژه متوقف شد؛ وضعیت ترجمه به‌صورت خودکار ذخیره می‌شود.', 'warning');
   };
 
-  const cancelTranslation = () => {
+  const cancelCurrentTranslation = () => {
+    if (!jobRunnerRef.current || !jobRunnerRef.current.isProcessing()) {
+      if (activeFileId) {
+        updateFileStatus(activeFileId, {
+          status: AppStatus.CANCELLED,
+          progressMessage: 'لغو شد',
+          activeTranslationBlockIds: []
+        });
+      }
+      return;
+    }
+
+    const currentFile = filesRef.current.find(f => f.id === activeFileId);
+    const hasMoreInQueue = jobRunnerRef.current.getQueueLength() > 0;
+
+    // Abort active job in the runner, allowing queue to immediately continue with next files
+    jobRunnerRef.current.cancelActive();
+
+    if (activeFileId) {
+      updateFileStatus(activeFileId, {
+        status: AppStatus.CANCELLED,
+        progressMessage: 'لغو شد',
+        activeTranslationBlockIds: []
+      });
+    }
+
+    if (hasMoreInQueue) {
+      showToast(
+        currentFile 
+          ? `ترجمه "${currentFile.name}" لغو شد؛ ترجمه فایل بعدی در صف بلافاصله آغاز می‌شود...` 
+          : 'ترجمه فایل جاری لغو شد؛ ترجمه فایل بعدی در صف بلافاصله آغاز می‌شود...',
+        'info'
+      );
+    } else {
+      isTranslatingRef.current = false;
+      showToast('ترجمه فایل جاری لغو شد.', 'warning');
+    }
+  };
+
+  const cancelAllTranslations = () => {
     isTranslatingRef.current = false;
     isPausedRef.current = false; 
+    autoPipelineActiveRef.current = false;
     jobRunnerRef.current?.cancelAll();
     setFiles(prev => prev.map(f => 
-        (f.status === AppStatus.TRANSLATING || f.status === AppStatus.PAUSED) 
+        (f.status === AppStatus.TRANSLATING || f.status === AppStatus.PAUSED || f.progressMessage?.includes('صف')) 
         ? { ...f, status: AppStatus.CANCELLED, progressMessage: 'لغو شد', activeTranslationBlockIds: [] } 
         : f
     ));
+    showToast('ترجمه تمام فایل‌های صف لغو شد.', 'warning');
+  };
+
+  const cancelTranslation = () => {
+    const hasMoreInQueue = (jobRunnerRef.current?.getQueueLength() || 0) > 0;
+    if (hasMoreInQueue) {
+      cancelCurrentTranslation();
+    } else {
+      cancelAllTranslations();
+    }
   };
 
   return (
@@ -1474,7 +1541,27 @@ const App: React.FC = () => {
                             </div>
                         );})}
                     </div>
-                    <StatsCard activeFile={getActiveFile()} activeFileIndex={getActiveFileIndex()} totalFiles={files.length} translationMethod={settings.translationMethod} onTranslationMethodChange={(translationMethod) => updateSettings({ translationMethod })} onStart={startBatchTranslation} onPause={pauseTranslation} onCancel={cancelTranslation} onDownload={handleOpenExportModal} onDownloadZip={handleDownloadZip} onNewProject={resetProject} onOpenTimingTools={() => setIsTimingModalOpen(true)} onFixErrors={handleFixNetflixErrors} onSave={handleManualSave} onExportBackup={handleExportProjectFile} onOptimizeStructure={handleOptimizePersianStructure} />
+                    <StatsCard 
+                      activeFile={getActiveFile()} 
+                      activeFileIndex={getActiveFileIndex()} 
+                      totalFiles={files.length} 
+                      translationMethod={settings.translationMethod} 
+                      onTranslationMethodChange={(translationMethod) => updateSettings({ translationMethod })} 
+                      onStart={startBatchTranslation} 
+                      onPause={pauseTranslation} 
+                      onCancel={cancelTranslation} 
+                      onCancelCurrent={cancelCurrentTranslation}
+                      onCancelAll={cancelAllTranslations}
+                      hasQueuedFiles={(jobRunnerRef.current?.getQueueLength() || 0) > 0 || files.some(f => f.id !== activeFileId && (f.status === AppStatus.READY || f.status === AppStatus.PAUSED || f.progressMessage?.includes('صف')))}
+                      onDownload={handleOpenExportModal} 
+                      onDownloadZip={handleDownloadZip} 
+                      onNewProject={resetProject} 
+                      onOpenTimingTools={() => setIsTimingModalOpen(true)} 
+                      onFixErrors={handleFixNetflixErrors} 
+                      onSave={handleManualSave} 
+                      onExportBackup={handleExportProjectFile} 
+                      onOptimizeStructure={handleOptimizePersianStructure} 
+                    />
                     <div className="mb-6 glass p-6 rounded-2xl border border-border space-y-3">
                          <label className="text-sm font-bold text-white/70 flex items-center gap-2"><Wand2 className="w-4 h-4 text-[#ff00ea]" />پرامپت اختصاصی (Custom Prompt)</label>
                          <textarea value={settings.customPrompt} onChange={(e) => updateSettings({ customPrompt: e.target.value })} placeholder="دستورالعمل خاصی دارید؟ اینجا بنویسید..." className="w-full bg-[#0a0e27]/50 text-sm text-text placeholder-text-muted focus:outline-none resize-none h-24 rounded-xl p-4 border border-white/10 focus:border-[#ff00ea]/50 transition-all" />

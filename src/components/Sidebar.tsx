@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Header Bar */}
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#1e2a5e] px-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary shadow-xs">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#24336a] bg-[#1a2550] text-primary shadow-xs">
               <SlidersHorizontal className="h-4 w-4" />
             </div>
             <div>
@@ -126,9 +126,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Globe className="h-3.5 w-3.5 text-primary" />
                 <span>زبان و استاندارد پخش</span>
               </span>
-              <span className="rounded bg-surfaceHighlight px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
-                I/O
-              </span>
             </div>
 
             <SettingsCombobox
@@ -139,7 +136,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               options={Object.entries(TARGET_LANGUAGES).map(([value, label]) => ({
                 value: value as TargetLanguage,
                 label,
-                badge: LANGUAGE_BADGES[value as TargetLanguage]
               }))}
               description="اعمال برای کل فرایند ترجمه، بازبینی و ویرایش زیرنویس."
             />
@@ -161,9 +157,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Palette className="h-3.5 w-3.5 text-secondary" />
                 <span>لحن و بافت متن</span>
               </span>
-              <span className="rounded bg-surfaceHighlight px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
-                STYLE
-              </span>
             </div>
 
             <SettingsCombobox
@@ -174,7 +167,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               options={Object.entries(TONE_OPTIONS).map(([value, label]) => ({
                 value: value as ToneType,
                 label,
-                badge: TONE_BADGES[value as ToneType]
               }))}
             />
 
@@ -186,7 +178,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               options={Object.entries(TOPIC_OPTIONS).map(([value, label]) => ({
                 value: value as TopicType,
                 label,
-                badge: TOPIC_BADGES[value as TopicType]
               }))}
             />
           </div>
@@ -206,7 +197,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>اصطلاحات محافظت‌شده</span>
               </div>
               {protectedTermsCount > 0 ? (
-                <span className="rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
+                <span className="rounded-md border border-[#24336a] bg-[#1a2550] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
                   {protectedTermsCount} اصطلاح
                 </span>
               ) : (
@@ -219,7 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               value={settings.doNotTranslateTerms}
               onChange={(e) => updateSettings({ doNotTranslateTerms: e.target.value })}
               placeholder="مثال: React, API, SubMaster, Docker"
-              className="min-h-[84px] w-full resize-y rounded-xl border border-[#1e2a5e] bg-[var(--input-bg,#060a20)] p-3 font-mono text-xs leading-5 text-text placeholder:text-text-muted/50 shadow-inner transition-all duration-200 focus:border-primary/80 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="min-h-[84px] w-full resize-y rounded-xl border border-[#1e2a5e] bg-[var(--input-bg,#060a20)] p-3 font-mono text-xs leading-5 text-text placeholder:text-text-muted/50 shadow-inner transition-all duration-200 focus:border-[#2b3c7e] focus:outline-none focus:ring-1 focus:ring-[#2b3c7e]"
               dir="auto"
             />
             
@@ -233,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={onOpenGlossary}
               type="button"
-              className="group flex min-h-[46px] w-full items-center justify-between rounded-xl border border-secondary/30 bg-secondary/10 px-3.5 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 hover:border-secondary/50 hover:bg-secondary/15 active:scale-[0.995]"
+              className="group flex min-h-[46px] w-full items-center justify-between rounded-xl border border-[#24336a] bg-[#141d42] px-3.5 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 hover:border-[#2f428a] hover:bg-[#182350] active:scale-[0.995]"
             >
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary/20 text-secondary">
@@ -260,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onOpenTextTranslator}
             type="button"
-            className="group flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-[#273875] bg-gradient-to-r from-[#121a3e] to-[#182455] px-4 py-2.5 text-sm font-bold text-text shadow-sm transition-all duration-200 hover:border-primary/60 hover:from-[#172354] hover:to-[#1e2e6d] hover:text-white hover:shadow-md hover:shadow-primary/10 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="group flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-[#273875] bg-gradient-to-r from-[#121a3e] to-[#182455] px-4 py-2.5 text-sm font-bold text-text shadow-sm transition-all duration-200 hover:border-[#384e9c] hover:from-[#172354] hover:to-[#1e2e6d] hover:text-white hover:shadow-md active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-[#384e9c]"
           >
             <MessageSquareText className="h-4 w-4 text-primary transition-transform group-hover:scale-110" />
             <span>ترجمه فوری متن و دیالوگ</span>
@@ -269,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onOpenSettings}
             type="button"
-            className="group flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-[#1e2a5e] bg-surface/80 px-4 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 hover:border-[#2b3c7e] hover:bg-surfaceHighlight active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="group flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-[#1e2a5e] bg-surface/80 px-4 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 hover:border-[#2b3c7e] hover:bg-surfaceHighlight active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-[#2b3c7e]"
           >
             <Settings className="h-4 w-4 text-text-muted transition-transform duration-300 group-hover:rotate-45 group-hover:text-text" />
             <span>تنظیمات پیشرفته سیستم</span>

@@ -8,6 +8,8 @@ export class TranslationJobRunner {
   private activeJob: TranslationJob | null = null;
   private controller: AbortController | null = null;
   private listeners = new Set<TranslationJobListener>();
+  private isCancelledAll = false;
+  private runningPromise: Promise<void> | null = null;
 
   constructor(private readonly handler: TranslationJobHandler) {}
 
@@ -37,7 +39,7 @@ export class TranslationJobRunner {
 
   public abortFile(fileId: string): void {
     if (this.activeJob?.fileId === fileId) {
-      this.abortActive('cancelled');
+      this.cancelActive();
     } else {
       this.dequeue(fileId);
     }
@@ -45,6 +47,18 @@ export class TranslationJobRunner {
 
   public isProcessing(): boolean {
     return this.activeJob !== null || this.queue.length > 0;
+  }
+
+  public getQueueLength(): number {
+    return this.queue.length;
+  }
+
+  public getActiveJob(): TranslationJob | null {
+    return this.activeJob ? { ...this.activeJob } : null;
+  }
+
+  public getCancelledAll(): boolean {
+    return this.isCancelledAll;
   }
 
   public onChange(listener: TranslationJobListener): () => void {
@@ -60,37 +74,58 @@ export class TranslationJobRunner {
     this.abortActive('paused');
   }
 
-  public cancelAll(): void {
+  public cancelActive(): void {
     this.abortActive('cancelled');
-    this.queue.splice(0).forEach(job => this.finish(job, 'cancelled'));
+  }
+
+  public cancelAll(): void {
+    this.isCancelledAll = true;
+    this.abortActive('cancelled');
+    const pending = this.queue.splice(0);
+    pending.forEach(job => this.finish(job, 'cancelled'));
   }
 
   public async run(): Promise<void> {
-    while (this.queue.length > 0) {
-      const job = this.queue.shift()!;
-      this.activeJob = job;
-      this.controller = new AbortController();
-      job.status = 'running';
-      job.startedAt = new Date().toISOString();
-      this.emit(job);
+    if (this.runningPromise) return this.runningPromise;
 
+    this.isCancelledAll = false;
+    this.runningPromise = (async () => {
       try {
-        await this.handler(job, this.controller.signal);
-        if (job.status === 'running') this.finish(job, 'completed');
-      } catch (error: any) {
-        if (this.controller.signal.aborted) {
-          if (job.status === 'running') this.finish(job, 'cancelled');
-        } else {
-          job.error = error?.message || String(error);
-          this.finish(job, 'failed');
+        while (this.queue.length > 0) {
+          const job = this.queue.shift()!;
+          this.activeJob = job;
+          this.controller = new AbortController();
+          job.status = 'running';
+          job.startedAt = new Date().toISOString();
+          this.emit(job);
+
+          try {
+            await this.handler(job, this.controller.signal);
+            if (job.status === 'running') this.finish(job, 'completed');
+          } catch (error: any) {
+            if (this.controller.signal.aborted) {
+              if (job.status === 'running') this.finish(job, 'cancelled');
+            } else {
+              job.error = error?.message || String(error);
+              this.finish(job, 'failed');
+            }
+          } finally {
+            this.activeJob = null;
+            this.controller = null;
+          }
+
+          // Crucial: Only break if user explicitly paused or cancelled the ENTIRE batch.
+          // If a single file was cancelled or deleted, the runner MUST continue processing the remaining queued files!
+          if ((job.status as TranslationJobStatus) === 'paused' || this.isCancelledAll) {
+            break;
+          }
         }
       } finally {
-        this.activeJob = null;
-        this.controller = null;
+        this.runningPromise = null;
       }
+    })();
 
-      if ((job.status as TranslationJobStatus) === 'paused' || (job.status as TranslationJobStatus) === 'cancelled') break;
-    }
+    return this.runningPromise;
   }
 
   private abortActive(status: Extract<TranslationJobStatus, 'paused' | 'cancelled'>): void {
