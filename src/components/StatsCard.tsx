@@ -108,10 +108,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                             <div className="flex items-center gap-1">
                                 <button 
                                     onClick={onSave}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 transition-all text-xs font-bold"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 transition-all text-xs font-semibold"
                                     title="ذخیره وضعیت در حافظه مرورگر"
                                 >
-                                    <Save className="w-4 h-4" />
+                                    <Save className="w-3.5 h-3.5" />
                                     <span>ذخیره</span>
                                 </button>
                                 <HelpTooltip 
@@ -126,10 +126,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                             <div className="flex items-center gap-1">
                                 <button 
                                     onClick={onExportBackup}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-xs font-bold"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-xs font-semibold"
                                     title="دانلود فایل پروژه (JSON)"
                                 >
-                                    <FileJson className="w-4 h-4" />
+                                    <FileJson className="w-3.5 h-3.5" />
                                     <span>بکاپ</span>
                                 </button>
                                 <HelpTooltip 
@@ -300,16 +300,16 @@ export const StatsCard: React.FC<StatsCardProps> = ({
             </div>
         )}
 
-        {/* Action Buttons - Centered and 1/3 Width on Desktop */}
-        <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+        {/* Action Buttons - Uniform, standard-sized, single-line buttons */}
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
              {/* Netflix Fix Button */}
              {hasErrors && onFixErrors && (
                  <button 
                     onClick={onFixErrors}
-                    className="w-full md:w-1/3 bg-[#E50914] hover:bg-[#b20710] text-white font-bold py-3 px-6 rounded-xl shadow-[0_0_20px_rgba(229,9,20,0.4)] transition-all flex items-center justify-center gap-2 animate-in slide-in-from-top-2"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#E50914] hover:bg-[#b20710] text-white text-sm font-semibold whitespace-nowrap shadow-[0_0_20px_rgba(229,9,20,0.4)] transition-all animate-in slide-in-from-top-2"
                  >
-                     <Wand2 className="w-5 h-5" />
-                     اصلاح خودکار ({validationErrors.length})
+                     <Wand2 className="w-4 h-4" />
+                     <span>اصلاح خودکار ({validationErrors.length})</span>
                  </button>
              )}
 
@@ -317,10 +317,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {hasTranslation && !isProcessing && onOptimizeStructure && (
                   <button 
                      onClick={onOptimizeStructure}
-                     className="w-full md:w-1/3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 animate-in slide-in-from-top-2"
+                     className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 text-sm font-semibold whitespace-nowrap transition-all animate-in slide-in-from-top-2"
                   >
-                      <Sparkles className="w-5 h-5" />
-                      بهینه‌سازی ساختار
+                      <Sparkles className="w-4 h-4" />
+                      <span>بهینه‌سازی ساختار</span>
                   </button>
              )}
 
@@ -328,10 +328,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {(isReady || isPaused || isError) && !hasErrors && (
                  <button 
                     onClick={onStart}
-                    className="w-full md:w-1/3 bg-gradient-to-r from-[#00f0ff] to-[#00c0cc] text-black font-bold py-3 px-6 rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)] transition-all transform hover:-translate-y-1 flex items-center justify-center gap-2"
+                    className="flex items-center justify-center gap-2 h-10 px-6 rounded-xl bg-gradient-to-r from-[#00f0ff] to-[#00c0cc] text-black text-sm font-semibold whitespace-nowrap shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_25px_rgba(0,240,255,0.5)] transition-all transform hover:-translate-y-0.5"
                  >
-                    <Play className="w-5 h-5 fill-current" />
-                    {totalFiles > 1 ? 'ترجمه نوبتی' : (isPaused ? 'ادامه ترجمه' : 'شروع ترجمه')}
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>{totalFiles > 1 ? 'ترجمه نوبتی' : (isPaused ? 'ادامه ترجمه' : 'شروع ترجمه')}</span>
                  </button>
              )}
 
@@ -339,10 +339,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {isProcessing && (
                 <button 
                     onClick={onPause}
-                    className="w-full md:w-1/3 bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-6 rounded-xl border border-white/10 transition-all flex items-center justify-center gap-2"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#1a2550] hover:bg-[#223068] text-white border border-[#2b3c7e] text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
                  >
-                    <Pause className="w-5 h-5 fill-current" />
-                    توقف
+                    <Pause className="w-4 h-4 fill-current" />
+                    <span>توقف</span>
                  </button>
              )}
 
@@ -353,19 +353,19 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                    <button 
                       type="button"
                       onClick={onCancelCurrent || onCancel}
-                      className="w-full md:w-auto flex-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-bold py-3 px-4 rounded-xl border border-amber-500/25 transition-all flex items-center justify-center gap-2"
+                      className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-sm font-semibold whitespace-nowrap border border-amber-500/25 transition-all shadow-xs"
                       title="لغو ترجمه فایل فعلی؛ ترجمه فایل بعدی در صف بلافاصله و خودکار آغاز می‌شود"
                    >
-                      <SkipForward className="w-5 h-5" />
-                      <span>لغو فایل جاری (شروع بعدی)</span>
+                      <SkipForward className="w-4 h-4" />
+                      <span>لغو فایل جاری</span>
                    </button>
                    <button 
                       type="button"
                       onClick={onCancelAll || onCancel}
-                      className="w-full md:w-auto flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold py-3 px-4 rounded-xl border border-red-500/20 transition-all flex items-center justify-center gap-2"
+                      className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-sm font-semibold whitespace-nowrap border border-red-500/25 transition-all shadow-xs"
                       title="توقف و لغو کامل تمام فایل‌های صف"
                    >
-                      <XCircle className="w-5 h-5" />
+                      <XCircle className="w-4 h-4" />
                       <span>لغو کل صف</span>
                    </button>
                  </>
@@ -373,10 +373,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                  <button 
                     type="button"
                     onClick={onCancel}
-                    className="w-full md:w-1/3 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold py-3 px-6 rounded-xl border border-red-500/20 transition-all flex items-center justify-center gap-2"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-sm font-semibold whitespace-nowrap border border-red-500/25 transition-all shadow-xs"
                  >
-                    <XCircle className="w-5 h-5" />
-                    <span>لغو</span>
+                    <XCircle className="w-4 h-4" />
+                    <span>لغو ترجمه</span>
                  </button>
                )
              )}
@@ -385,10 +385,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {canDownloadOutput && (
                  <button 
                     onClick={onDownload}
-                    className="w-full md:w-1/3 bg-[#ff00ea]/10 text-[#ff00ea] border border-[#ff00ea] hover:bg-[#ff00ea]/20 shadow-[0_0_15px_rgba(255,0,234,0.2)] font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 animate-in zoom-in"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#ff00ea]/10 text-[#ff00ea] border border-[#ff00ea]/50 hover:bg-[#ff00ea]/20 shadow-[0_0_15px_rgba(255,0,234,0.2)] text-sm font-semibold whitespace-nowrap transition-all animate-in zoom-in"
                   >
-                    <Download className="w-5 h-5" />
-                    {isCompleted ? 'دانلود فایل' : 'خروجی فایل فعلی'}
+                    <Download className="w-4 h-4" />
+                    <span>{isCompleted ? 'دانلود فایل' : 'خروجی فایل فعلی'}</span>
                   </button>
              )}
              
@@ -396,11 +396,11 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {totalFiles > 1 && (
                  <button 
                     onClick={onDownloadZip}
-                    className="w-full md:w-1/3 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#1a2550] hover:bg-[#223068] text-white border border-[#2b3c7e] text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
                     title="دانلود همه فایل‌ها بصورت زیپ"
                   >
-                    <Archive className="w-5 h-5" />
-                    دانلود ZIP
+                    <Archive className="w-4 h-4" />
+                    <span>دانلود ZIP</span>
                   </button>
              )}
 
@@ -408,10 +408,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {(isCompleted || isCancelled) && (
                  <button 
                     onClick={onNewProject}
-                    className="w-full md:w-1/3 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#141d42] hover:bg-[#1c295c] text-white/80 hover:text-white border border-[#24336a] text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
                   >
-                    <RefreshCw className="w-5 h-5" />
-                    پروژه جدید
+                    <RefreshCw className="w-4 h-4" />
+                    <span>پروژه جدید</span>
                   </button>
              )}
         </div>

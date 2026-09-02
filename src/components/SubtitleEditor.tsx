@@ -235,7 +235,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
           <button 
             onClick={handleReplaceClick}
             disabled={!findTerm.trim()}
-            className="w-full md:w-auto bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/20 font-bold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center gap-2"
+            className="w-full md:w-auto h-11 px-5 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/20 text-sm font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center gap-2"
           >
              <Replace className="w-4 h-4" />
              {scope === 'all' ? 'جایگزینی در تمام فایل‌ها' : 'جایگزینی در فایل جاری'}
