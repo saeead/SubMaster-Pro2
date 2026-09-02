@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SubAI - Persian Subtitle Translator</title>
+    <meta name="description" content="A professional tool to translate and improve SRT/VTT subtitles into Persian using Google Gemini API." />
+    <meta property="og:title" content="SubAI - Persian Subtitle Translator" />
+    <meta property="og:description" content="A professional tool to translate and improve SRT/VTT subtitles into Persian using Google Gemini API." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              background: 'var(--bg-main)',
+              surface: 'var(--bg-surface)',
+              surfaceHighlight: 'var(--bg-surface-highlight)',
+              border: 'var(--border-color)',
+              text: {
+                DEFAULT: 'var(--text-main)',
+                muted: 'var(--text-muted)'
+              },
+              primary: 'var(--neon-primary)',
+              secondary: 'var(--neon-secondary)'
+            }
+          }
+        }
+      }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lalezar&family=Montserrat:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&family=Vazirmatn:wght@100..900&display=swap" rel="stylesheet">
+    
+    <style>
+      :root {
+        /* Dark Mode (Default) */
+        --bg-main: #0a0e27;
+        --bg-surface: rgba(255, 255, 255, 0.05);
+        --bg-surface-highlight: rgba(255, 255, 255, 0.1);
+        --bg-elevated: #111936;
+        --border-color: rgba(255, 255, 255, 0.1);
+        --text-main: #ffffff;
+        --text-muted: #a0aec0;
+        
+        --glass-bg: rgba(255, 255, 255, 0.05);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        
+        --neon-primary: #00f0ff;
+        --neon-secondary: #ff00ea;
+      }
+
+      :root[data-theme="light"] {
+        /* Light Mode */
+        --bg-main: #f0f4f8;
+        --bg-surface: #ffffff;
+        --bg-surface-highlight: #e2e8f0;
+        --bg-elevated: #ffffff;
+        --border-color: #cbd5e0;
+        --text-main: #1a202c;
+        --text-muted: #718096;
+        
+        --glass-bg: rgba(255, 255, 255, 0.8);
+        --glass-border: rgba(203, 213, 224, 0.5);
+        
+        --neon-primary: #007780;
+        --neon-secondary: #aa0099;
+      }
+
+      body {
+        font-family: 'Vazirmatn', sans-serif;
+        background-color: var(--bg-main);
+        color: var(--text-main);
+        transition: background-color 0.3s ease, color 0.3s ease;
+        min-height: 100vh;
+      }
+
+      /* Dynamic Background Gradient */
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        background-image: 
+          radial-gradient(circle at 10% 20%, var(--neon-primary) 0%, transparent 20%),
+          radial-gradient(circle at 90% 80%, var(--neon-secondary) 0%, transparent 20%);
+        opacity: 0.1;
+        pointer-events: none;
+      }
+
+      .font-montserrat {
+        font-family: 'Montserrat', sans-serif;
+      }
+      
+      /* Glassmorphism Utilities */
+      .glass {
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+      }
+      
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--bg-surface);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-color);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
+      }
+
+      /* Animations */
+      @keyframes pulse-neon {
+        0%, 100% { box-shadow: 0 0 10px var(--neon-primary); }
+        50% { box-shadow: 0 0 20px var(--neon-primary), 0 0 10px var(--neon-secondary); }
+      }
+      .animate-pulse-neon {
+        animation: pulse-neon 2s infinite;
+      }
+    </style>
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/src/index.tsx"></script>
+</body>
+</html>

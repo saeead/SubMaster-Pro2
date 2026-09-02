@@ -1,0 +1,8 @@
+{
+  "name": "SubAI - Persian Subtitle Translator",
+  "description": "A professional tool to translate and improve SRT/VTT subtitles into Persian using Google Gemini API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
