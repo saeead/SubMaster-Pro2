@@ -129,10 +129,7 @@ const App: React.FC = () => {
       }
     }
 
-    const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY);
-    if (savedVersion) {
-        APP_CONFIG.version = savedVersion;
-    }
+    localStorage.setItem(VERSION_STORAGE_KEY, APP_CONFIG.version);
 
     // Check for saved project states
     const projects = ProjectStateManager.listSavedProjects();
@@ -213,6 +210,8 @@ const App: React.FC = () => {
   // --- FILE MANAGEMENT ---
 
   const handleFilesLoaded = (loadedFiles: { blocks: SubtitleBlock[], filename: string, type: 'SRT' | 'VTT' | 'ASS', size: number }[]) => {
+    const isCurrentlyTranslating = isTranslatingRef.current;
+
     const newFiles: SubtitleFile[] = loadedFiles.map(f => ({
       id: crypto.randomUUID(),
       name: f.filename,
@@ -222,6 +221,7 @@ const App: React.FC = () => {
       blocks: f.blocks,
       status: AppStatus.READY,
       progress: 0,
+      progressMessage: isCurrentlyTranslating ? 'در صف ترجمه...' : undefined,
       diagnostic: null,
       processedCount: 0,
       activeTranslationBlockIds: [],
@@ -231,11 +231,28 @@ const App: React.FC = () => {
       historyPointer: -1
     }));
 
+    // Update synchronous ref immediately so running tasks can find the new files without delay
+    filesRef.current = [...filesRef.current, ...newFiles];
     setFiles(prev => [...prev, ...newFiles]);
+
     if (activeFileId === null && newFiles.length > 0) {
       setActiveFileId(newFiles[0].id);
     }
-    setToast([]);
+
+    // If batch translation is actively running, dynamically enqueue into the active runner
+    if (isCurrentlyTranslating && jobRunnerRef.current) {
+      newFiles.forEach(f => {
+        jobRunnerRef.current?.enqueue(f.id);
+      });
+      showToast(
+        newFiles.length === 1 
+          ? `فایل "${newFiles[0].name}" به صف پردازش فعلی افزوده شد و پس از فایل‌های قبلی ترجمه می‌شود.`
+          : `${newFiles.length} فایل جدید به صف پردازش فعلی افزوده شدند و به صورت خودکار ترجمه می‌شوند.`, 
+        'info'
+      );
+    } else {
+      setToast([]);
+    }
   };
 
   // Handle Importing a Backup JSON file
@@ -328,9 +345,16 @@ const App: React.FC = () => {
     const removedIndex = files.findIndex(file => file.id === fileId);
     if (removedIndex === -1) return;
     ProjectStateManager.deleteProjectState(fileId);
+
+    // If active translation runner is running, safely dequeue or abort this file
+    if (jobRunnerRef.current) {
+      jobRunnerRef.current.abortFile(fileId);
+    }
+
+    filesRef.current = filesRef.current.filter(file => file.id !== fileId);
     setFiles(prev => prev.filter(file => file.id !== fileId));
     if (activeFileId === fileId) {
-      const remaining = files.filter(file => file.id !== fileId);
+      const remaining = filesRef.current;
       setActiveFileId(remaining[Math.min(removedIndex, remaining.length - 1)]?.id || null);
     }
     showToast('فایل از پروژه حذف شد.', 'success');
@@ -1425,16 +1449,30 @@ const App: React.FC = () => {
                             outputStandard={settings.outputStandard}
                             variant="compact"
                         />
-                        {files.map(file => (
-                            <div key={file.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all min-w-[170px] max-w-[220px] flex-shrink-0 ${activeFileId === file.id ? 'bg-primary/10 border-primary text-text shadow-[0_0_15px_rgba(0,240,255,0.1)]' : 'bg-surface border-border text-text-muted hover:bg-surfaceHighlight'}`}>
+                        {files.map(file => {
+                            const isQueued = jobRunnerRef.current?.getSnapshot().some(j => j.fileId === file.id && j.status === 'queued') || (file.status === AppStatus.READY && file.progressMessage?.includes('صف'));
+                            return (
+                            <div key={file.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all min-w-[170px] max-w-[240px] flex-shrink-0 ${activeFileId === file.id ? 'bg-primary/10 border-primary text-text shadow-[0_0_15px_rgba(0,240,255,0.1)]' : 'bg-surface border-border text-text-muted hover:bg-surfaceHighlight'}`}>
                               <button type="button" onClick={() => setActiveFileId(file.id)} className="flex min-w-0 flex-1 items-center gap-2 text-right">
-                                <div className={`w-2 h-2 rounded-full ${file.status === AppStatus.COMPLETED ? 'bg-green-500' : file.status === AppStatus.TRANSLATING ? 'bg-yellow-500 animate-pulse' : file.status === AppStatus.ERROR ? 'bg-red-500' : file.status === AppStatus.PAUSED ? 'bg-orange-400' : 'bg-text/20'}`}></div>
+                                <div className={`w-2 h-2 rounded-full ${
+                                  file.status === AppStatus.COMPLETED ? 'bg-green-500' : 
+                                  file.status === AppStatus.TRANSLATING ? 'bg-yellow-500 animate-pulse' : 
+                                  file.status === AppStatus.ERROR ? 'bg-red-500' : 
+                                  file.status === AppStatus.PAUSED ? 'bg-orange-400' : 
+                                  isQueued ? 'bg-cyan-400 animate-pulse' :
+                                  'bg-text/20'
+                                }`}></div>
                                 <span className="truncate text-sm font-medium direction-ltr">{file.name}</span>
+                                {isQueued && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 font-normal mr-auto border border-cyan-500/20 whitespace-nowrap">
+                                    در صف
+                                  </span>
+                                )}
                                 {file.status === AppStatus.COMPLETED && <Check className="w-3 h-3 text-green-500 ml-auto" />}
                               </button>
                               <button type="button" onClick={() => removeFile(file.id)} className="rounded-full p-1 text-text-muted transition-colors hover:bg-red-500/15 hover:text-red-400" aria-label={`بستن ${file.name}`} title="بستن فایل"><X className="h-4 w-4" /></button>
                             </div>
-                        ))}
+                        );})}
                     </div>
                     <StatsCard activeFile={getActiveFile()} activeFileIndex={getActiveFileIndex()} totalFiles={files.length} translationMethod={settings.translationMethod} onTranslationMethodChange={(translationMethod) => updateSettings({ translationMethod })} onStart={startBatchTranslation} onPause={pauseTranslation} onCancel={cancelTranslation} onDownload={handleOpenExportModal} onDownloadZip={handleDownloadZip} onNewProject={resetProject} onOpenTimingTools={() => setIsTimingModalOpen(true)} onFixErrors={handleFixNetflixErrors} onSave={handleManualSave} onExportBackup={handleExportProjectFile} onOptimizeStructure={handleOptimizePersianStructure} />
                     <div className="mb-6 glass p-6 rounded-2xl border border-border space-y-3">

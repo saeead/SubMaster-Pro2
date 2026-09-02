@@ -12,6 +12,10 @@ export class TranslationJobRunner {
   constructor(private readonly handler: TranslationJobHandler) {}
 
   public enqueue(fileId: string): TranslationJob {
+    const existing = this.queue.find(j => j.fileId === fileId);
+    if (existing) return existing;
+    if (this.activeJob?.fileId === fileId) return this.activeJob;
+
     const job: TranslationJob = {
       id: crypto.randomUUID(),
       fileId,
@@ -21,6 +25,26 @@ export class TranslationJobRunner {
     this.queue.push(job);
     this.emit(job);
     return job;
+  }
+
+  public dequeue(fileId: string): void {
+    const index = this.queue.findIndex(job => job.fileId === fileId);
+    if (index !== -1) {
+      const [removed] = this.queue.splice(index, 1);
+      this.finish(removed, 'cancelled');
+    }
+  }
+
+  public abortFile(fileId: string): void {
+    if (this.activeJob?.fileId === fileId) {
+      this.abortActive('cancelled');
+    } else {
+      this.dequeue(fileId);
+    }
+  }
+
+  public isProcessing(): boolean {
+    return this.activeJob !== null || this.queue.length > 0;
   }
 
   public onChange(listener: TranslationJobListener): () => void {
@@ -59,7 +83,6 @@ export class TranslationJobRunner {
         } else {
           job.error = error?.message || String(error);
           this.finish(job, 'failed');
-          throw error;
         }
       } finally {
         this.activeJob = null;

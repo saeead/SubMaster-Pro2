@@ -2,7 +2,7 @@
 import { ToneType, TopicType, GlossaryItem, StyleTemplate, TargetLanguage, OutputStandard, TranslationMethod, AIProvider, ModelType } from "./types";
 
 export const APP_CONFIG = {
-  version: "2.5.0", // Broadcast Standards Update
+  version: "3.0.0", // Dynamic Batch Queue & Real-time Auto-Pipeline Update
   maxWordsPerBlock: 24, 
   minWordsPerBlock: 1, 
   maxFileSize: 100 * 1024 * 1024, 

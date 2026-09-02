@@ -145,8 +145,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onLoad, onProjectLoad, s
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="flex min-w-[150px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border border-dashed border-primary/50 bg-primary/10 px-4 py-3 text-sm font-bold text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary/20 hover:shadow-[0_0_18px_rgba(0,240,255,0.18)]"
-        title="افزودن فایل جدید"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex min-w-[150px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-3 text-sm font-bold transition-all ${
+          isDragging
+            ? 'border-primary bg-primary/25 text-white scale-105 shadow-[0_0_20px_rgba(0,240,255,0.35)] ring-2 ring-primary/60'
+            : 'border-primary/50 bg-primary/10 text-primary hover:-translate-y-0.5 hover:border-primary hover:bg-primary/20 hover:shadow-[0_0_18px_rgba(0,240,255,0.18)]'
+        }`}
+        title="افزودن فایل جدید (کلیک یا کشیدن و رها کردن)"
       >
         <input
           type="file"
@@ -156,8 +163,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onLoad, onProjectLoad, s
           accept=".srt,.vtt,.ass,.ssa,.json"
           multiple
         />
-        <Plus className="h-5 w-5" />
-        <span>افزودن فایل</span>
+        <Plus className={`h-5 w-5 ${isDragging ? 'animate-bounce' : ''}`} />
+        <span>{isDragging ? 'اینجا رها کنید' : 'افزودن فایل'}</span>
       </button>
     );
   }

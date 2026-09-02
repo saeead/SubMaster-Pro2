@@ -1,9 +1,9 @@
 
 
 import React, { useEffect } from 'react';
-import { AlertCircle, X, CheckCircle, AlertTriangle } from 'lucide-react';
+import { AlertCircle, X, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 
-export type ToastType = 'error' | 'warning' | 'success';
+export type ToastType = 'error' | 'warning' | 'success' | 'info';
 
 interface ToastProps {
   message: string;
@@ -19,6 +19,17 @@ export const Toast: React.FC<ToastProps> = ({ message, type = 'error', onClose }
 
   const getStyle = () => {
     switch (type) {
+      case 'info':
+        return {
+          bg: 'bg-[#0a0e27]/95',
+          border: 'border-cyan-500/50',
+          shadow: 'shadow-[0_0_30px_rgba(6,182,212,0.2)]',
+          iconBg: 'bg-cyan-500/20',
+          textTitle: 'text-cyan-200',
+          iconColor: 'text-cyan-400',
+          Icon: Info,
+          title: 'اطلاع‌رسانی'
+        };
       case 'warning':
         return {
           bg: 'bg-[#0a0e27]/95',

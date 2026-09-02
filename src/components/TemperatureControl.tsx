@@ -46,27 +46,32 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
   const presetDescription = TOPIC_TEMPERATURE_DEFAULTS[topic]?.description || '';
 
   return (
-    <div className="bg-[#0a0e27]/40 backdrop-blur-sm rounded-xl p-5 border border-white/10 mt-2 transition-all hover:border-white/20">
+    <div className="rounded-2xl border border-[#1e2a5e] bg-surface/50 p-4 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-[#2b3c7e]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-[#00f0ff]/10 rounded-lg">
-             <Thermometer className="w-4 h-4 text-[#00f0ff]" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+             <Thermometer className="w-3.5 h-3.5" />
           </div>
-          <h3 className="text-white text-sm font-semibold">کنترل کیفیت ترجمه</h3>
+          <div>
+            <h3 className="text-xs font-bold text-text">کیفیت و خلاقیت هوش مصنوعی</h3>
+            <span className="text-[10px] text-text-muted">تنظیم دمای نمونه‌برداری مدل</span>
+          </div>
         </div>
-        <span className="text-[10px] font-mono text-[#00f0ff] bg-[#00f0ff]/10 border border-[#00f0ff]/20 px-2 py-0.5 rounded-md">
+        <span className="rounded-md border border-primary/25 bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary shadow-xs">
           {localTemp.toFixed(2)}
         </span>
       </div>
 
       {/* Description */}
-      <p className="text-[10px] text-white/50 mb-4 h-8 leading-tight">
-        {presetDescription}
-      </p>
+      {presetDescription && (
+        <p className="mb-3 text-[11px] leading-relaxed text-text-muted">
+          {presetDescription}
+        </p>
+      )}
 
       {/* Slider */}
-      <div className="relative mb-6 px-1">
+      <div className="relative mb-3 px-0.5">
         <input
           type="range"
           min="0"
@@ -78,14 +83,13 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
           onMouseUp={() => setIsDragging(false)}
           onTouchStart={() => setIsDragging(true)}
           onTouchEnd={() => setIsDragging(false)}
-          className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none relative z-10"
+          className="relative z-10 h-2 w-full cursor-pointer appearance-none rounded-full outline-none"
           style={{
             background: `linear-gradient(to right, #3B82F6 0%, #8B5CF6 50%, #EC4899 100%)`
           }}
+          aria-label="تنظیم دمای مدل"
         />
         
-        {/* Thumb Glow Effect (CSS only handles standard thumb, this adds extra glow logic if needed, 
-            but for now we rely on standard input styling plus custom thumb CSS injected globally or below) */}
          <style>{`
             input[type=range]::-webkit-slider-thumb {
                 -webkit-appearance: none;
@@ -93,14 +97,15 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
                 width: 18px;
                 border-radius: 50%;
                 background: #ffffff;
+                border: 2px solid var(--neon-primary, #00f0ff);
                 cursor: pointer;
-                box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-                margin-top: -4px; /* Adjust for vertical alignment */
-                transition: transform 0.1s;
+                box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+                margin-top: -5px;
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
             }
             input[type=range]::-webkit-slider-thumb:hover {
-                transform: scale(1.2);
-                box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+                transform: scale(1.15);
+                box-shadow: 0 0 14px rgba(0, 240, 255, 0.7);
             }
             input[type=range]::-webkit-slider-runnable-track {
                 width: 100%;
@@ -112,20 +117,20 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
       </div>
 
       {/* Labels */}
-      <div className="flex justify-between text-[10px] text-white/30 mb-3 px-1">
+      <div className="mb-2.5 flex justify-between px-0.5 text-[10px] text-text-muted">
         <div className="flex items-center gap-1">
-          <Target className="w-3 h-3 text-blue-400" />
-          <span>دقت</span>
+          <Target className="w-3 h-3 text-blue-500" />
+          <span>دقت و ترجمه خطی</span>
         </div>
         <div className="flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-pink-400" />
-          <span>خلاقیت</span>
+          <Sparkles className="w-3 h-3 text-pink-500" />
+          <span>انعطاف و خلاقیت</span>
         </div>
       </div>
 
       {/* Status Bar */}
-      <div className="bg-[#0a0e27] rounded-lg p-2 text-center border border-white/5 flex items-center justify-between px-3">
-        <span className="text-xs text-white/80 font-medium w-full text-center">
+      <div className="flex items-center justify-between rounded-lg border border-[#1e2a5e] bg-surfaceHighlight/50 px-3 py-1.5 text-center">
+        <span className="w-full text-center text-xs font-semibold text-text">
           {getLabel()}
         </span>
       </div>
@@ -134,10 +139,10 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
       {localTemp !== TOPIC_TEMPERATURE_DEFAULTS[topic]?.value && (
           <button
             onClick={handleReset}
-            className="w-full mt-3 text-[10px] text-white/40 hover:text-[#00f0ff] transition-colors flex items-center justify-center gap-1 animate-in fade-in"
+            className="mt-2.5 flex w-full items-center justify-center gap-1.5 text-xs text-text-muted transition-colors hover:text-primary"
           >
             <RotateCcw className="w-3 h-3" />
-            بازگشت به پیش‌فرض ({TOPIC_TEMPERATURE_DEFAULTS[topic]?.value})
+            <span>بازگشت به پیش‌فرض موضوع ({TOPIC_TEMPERATURE_DEFAULTS[topic]?.value})</span>
           </button>
       )}
     </div>
