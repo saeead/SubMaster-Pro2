@@ -156,6 +156,7 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder="متن خود را اینجا بنویسید..."
+                    dir="auto"
                     className="flex-1 w-full bg-transparent p-5 text-sm text-white/90 focus:outline-none resize-none leading-8 custom-scrollbar placeholder-white/20"
                 />
                 
@@ -215,7 +216,8 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
                     <textarea 
                         readOnly
                         value={outputText}
-                        className={`flex-1 w-full bg-transparent p-5 text-sm text-white focus:outline-none resize-none leading-8 custom-scrollbar ${targetLang === 'fa' ? 'dir-rtl' : 'dir-ltr'}`}
+                        dir="auto"
+                        className="flex-1 w-full bg-transparent p-5 text-sm text-white focus:outline-none resize-none leading-8 custom-scrollbar"
                     />
                 )}
 

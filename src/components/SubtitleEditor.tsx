@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { SubtitleBlock, NetflixError } from '../types';
-import { Clock, AlertTriangle, Search, Replace, ArrowLeft, Layers, Undo, Redo, CheckSquare, Square, Languages, X, Loader2, Wand2, Trash2, ChevronsDown, ChevronsUp } from 'lucide-react';
+import { Clock, AlertTriangle, Search, Replace, ArrowLeft, Layers, Undo, Redo, CheckSquare, Square, Languages, X, Loader2, Wand2, Trash2, ChevronsDown, ChevronsUp, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface SubtitleEditorProps {
   blocks: SubtitleBlock[];
@@ -142,6 +142,81 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     }
   };
 
+  const renderPagination = (position: 'top' | 'bottom') => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <nav 
+        className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0a0e27]/60 p-3 sm:p-4 backdrop-blur-md ${position === 'top' ? 'mb-2' : 'mt-4'}`}
+        aria-label={`صفحه‌بندی زیرنویس (${position === 'top' ? 'بالای لیست' : 'پایین لیست'})`}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-white/80">
+            صفحه <span className="text-[#00f0ff]">{currentPage}</span> از <span className="text-white">{totalPages}</span>
+          </span>
+          <span className="text-[11px] text-white/40 hidden sm:inline">
+            ({blocks.length} بلوک کل - ۵۰ بلوک در هر صفحه)
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            disabled={currentPage <= 1}
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-xs font-semibold text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            title="صفحه قبل"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">قبلی</span>
+          </button>
+
+          {Array.from({ length: totalPages }, (_, index) => index + 1).map(page => {
+            // Intelligent windowing for large page counts
+            if (totalPages > 9) {
+              const isFirst = page === 1;
+              const isLast = page === totalPages;
+              const isNear = Math.abs(page - currentPage) <= 1;
+              if (!isFirst && !isLast && !isNear) {
+                if (page === 2 || page === totalPages - 1) {
+                  return <span key={page} className="px-1 text-xs text-white/30 select-none">...</span>;
+                }
+                return null;
+              }
+            }
+
+            return (
+              <button
+                key={page}
+                type="button"
+                onClick={() => setCurrentPage(page)}
+                aria-current={page === currentPage ? 'page' : undefined}
+                className={`min-w-8 h-8 rounded-lg border px-2.5 text-xs font-bold transition-all ${
+                  page === currentPage
+                    ? 'border-[#00f0ff] bg-[#00f0ff]/15 text-[#00f0ff] shadow-xs'
+                    : 'border-white/10 bg-white/5 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {page}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            disabled={currentPage >= totalPages}
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-xs font-semibold text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            title="صفحه بعد"
+          >
+            <span className="hidden sm:inline">بعدی</span>
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </nav>
+    );
+  };
+
   return (
     <div className="space-y-6 pb-20">
       
@@ -243,6 +318,9 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
         </div>
       </div>
 
+      {/* Top Pagination Bar */}
+      {renderPagination('top')}
+
       {/* Blocks List */}
       <div className="space-y-4">
         {visibleBlocks.map((block) => {
@@ -306,17 +384,18 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="ltr">
                 {/* Original Text */}
-                <div className="relative group/input" dir="ltr">
+                <div className="relative group/input">
                     <label className="absolute -top-3 left-3 px-2 bg-[#0a0e27] text-[10px] text-white/40 uppercase tracking-wider rounded border border-white/10">Original</label>
                     <div 
-                        className="w-full p-4 bg-[#0a0e27]/50 rounded-xl text-white/80 text-sm leading-7 dir-ltr text-left border border-white/5 min-h-[100px]"
+                        dir="auto"
+                        className="w-full p-4 bg-[#0a0e27]/50 rounded-xl text-white/80 text-sm leading-7 border border-white/5 min-h-[100px]"
                     >
                         {block.originalText}
                     </div>
                 </div>
     
                 {/* Translated Text */}
-                <div className="relative group/input" dir="rtl">
+                <div className="relative group/input">
                     <label className={`absolute -top-3 right-3 px-2 bg-[#0a0e27] text-[10px] uppercase tracking-wider rounded border ${hasError ? 'text-[#E50914] border-[#E50914]/50' : 'text-[#00f0ff] border-[#00f0ff]/20'}`}>Persian</label>
                     <textarea
                         value={block.translatedText || ''}
@@ -334,14 +413,14 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                             }
                         }}
                         placeholder="در انتظار ترجمه..."
+                        dir="auto"
                         className={`
-                            w-full p-4 bg-[#0a0e27] rounded-xl text-sm leading-7 dir-rtl text-right resize-y min-h-[100px] focus:outline-none border transition-all
+                            w-full p-4 bg-[#0a0e27] rounded-xl text-sm leading-7 resize-y min-h-[100px] focus:outline-none border transition-all
                             ${block.translatedText 
                                 ? 'text-white border-white/10 focus:border-[#00f0ff]/50' 
                                 : 'text-white/30 border-white/5 focus:border-white/20 italic'
                             }
                         `}
-                        dir="rtl"
                     />
                 </div>
               </div>
@@ -350,16 +429,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
         })}
       </div>
 
-      {totalPages > 1 && (
-        <nav className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#0a0e27]/50 p-4" aria-label="صفحه‌بندی زیرنویس">
-          <span className="ml-2 text-xs text-white/50">صفحه {currentPage} از {totalPages} (هر صفحه ۵۰ بلوک)</span>
-          {Array.from({ length: totalPages }, (_, index) => index + 1).map(page => (
-            <button key={page} type="button" onClick={() => setCurrentPage(page)} aria-current={page === currentPage ? 'page' : undefined} className={`min-w-9 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${page === currentPage ? 'border-[#00f0ff] bg-[#00f0ff]/15 text-[#00f0ff]' : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10'}`}>
-              {page}
-            </button>
-          ))}
-        </nav>
-      )}
+      {/* Bottom Pagination Bar */}
+      {renderPagination('bottom')}
 
       {selectedCount > 0 && (
         <div className="fixed bottom-8 left-1/2 z-[65] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in">

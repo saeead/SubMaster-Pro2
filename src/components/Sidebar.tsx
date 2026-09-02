@@ -120,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           
           {/* Section 1: Language & Broadcasting Standard */}
-          <div className="rounded-2xl border border-[#1e2a5e] bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-[#2b3c7e]">
+          <div className="relative z-30 rounded-2xl border border-[#1e2a5e] bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-[#2b3c7e]">
             <div className="flex items-center justify-between px-1">
               <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-text-muted">
                 <Globe className="h-3.5 w-3.5 text-primary" />
@@ -151,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Section 2: Tone & Context */}
-          <div className="rounded-2xl border border-[#1e2a5e] bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-[#2b3c7e]">
+          <div className="relative z-20 rounded-2xl border border-[#1e2a5e] bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-[#2b3c7e]">
             <div className="flex items-center justify-between px-1">
               <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-text-muted">
                 <Palette className="h-3.5 w-3.5 text-secondary" />

@@ -71,7 +71,7 @@ export const Toast: React.FC<ToastProps> = ({ message, type = 'error', onClose }
   const IconComponent = style.Icon;
 
   return (
-    <div className="relative w-full max-w-md px-4 animate-in slide-in-from-bottom-5 fade-in duration-300">
+    <div className="relative w-full max-w-md animate-in slide-in-from-bottom-5 fade-in duration-300">
       <div className={`glass ${style.bg} border ${style.border} text-white p-4 rounded-2xl ${style.shadow} flex items-start gap-4 backdrop-blur-xl`}>
         <div className={`p-2 ${style.iconBg} rounded-full flex-shrink-0 mt-0.5`}>
            <IconComponent className={`w-5 h-5 ${style.iconColor}`} />
@@ -82,7 +82,8 @@ export const Toast: React.FC<ToastProps> = ({ message, type = 'error', onClose }
         </div>
         <button 
             onClick={onClose} 
-            className="p-1 hover:bg-white/10 rounded-full transition-colors -mr-1 text-white/50 hover:text-white"
+            className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/50 hover:text-white shrink-0 -mr-1"
+            title="بستن پیام"
         >
              <X className="w-4 h-4" />
         </button>

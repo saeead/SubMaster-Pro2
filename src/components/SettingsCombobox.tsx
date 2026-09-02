@@ -42,7 +42,7 @@ export const SettingsCombobox = <T extends string>({
   }, []);
 
   return (
-    <div ref={containerRef} className="space-y-1.5">
+    <div ref={containerRef} className={`space-y-1.5 transition-all duration-150 ${open ? 'relative z-50' : 'relative z-10'}`}>
       <div className="flex items-center justify-between px-0.5">
         <label className="flex items-center gap-1.5 text-xs font-bold tracking-wide text-text">
           {icon && <span className="text-primary">{icon}</span>}
@@ -50,7 +50,7 @@ export const SettingsCombobox = <T extends string>({
         </label>
       </div>
 
-      <div className="relative">
+      <div className={`relative ${open ? 'z-50' : 'z-10'}`}>
         <button
           type="button"
           aria-haspopup="listbox"
@@ -58,7 +58,7 @@ export const SettingsCombobox = <T extends string>({
           aria-controls={listId}
           onClick={() => setOpen(current => !current)}
           className={`group flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-right text-sm text-text shadow-xs backdrop-blur-md transition-all duration-200 hover:border-[#2e4085] hover:bg-surface/90 focus:outline-none focus:ring-1 focus:ring-[#2e4085] active:scale-[0.995] ${
-            open ? 'border-[#334794] bg-surface' : 'border-[#1e2a5e] bg-surface/60'
+            open ? 'border-[#334794] bg-surface ring-1 ring-primary/40' : 'border-[#1e2a5e] bg-surface/60'
           }`}
         >
           <div className="min-w-0 flex-1">
@@ -84,7 +84,8 @@ export const SettingsCombobox = <T extends string>({
             id={listId}
             role="listbox"
             aria-label={label}
-            className="absolute z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-[#1e2a5e] bg-[var(--bg-elevated)] p-1.5 shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 duration-150"
+            className="absolute right-0 left-0 top-full z-[100] mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-[#24336a] bg-[var(--bg-elevated,#111936)] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-all animate-in fade-in zoom-in-95 duration-150"
+            style={{ backgroundColor: 'var(--bg-elevated, #111936)' }}
           >
             {options.map(option => {
               const isSelected = option.value === value;
@@ -104,7 +105,7 @@ export const SettingsCombobox = <T extends string>({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className={`block truncate ${isSelected ? 'text-text font-bold' : ''}`}>
+                        <span className={`block truncate ${isSelected ? 'text-text font-bold text-primary' : ''}`}>
                           {option.label}
                         </span>
                       </div>

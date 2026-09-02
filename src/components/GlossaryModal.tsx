@@ -118,7 +118,8 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ isOpen, onClose, g
                                 value={newTerm}
                                 onChange={(e) => setNewTerm(e.target.value)}
                                 placeholder="واژه اصلی (انگلیسی)"
-                                className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#ff00ea] focus:outline-none dir-ltr"
+                                dir="auto"
+                                className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#ff00ea] focus:outline-none"
                             />
                         </div>
                         <div className="flex-1 space-y-1">
@@ -126,7 +127,8 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ isOpen, onClose, g
                                 value={newTranslation}
                                 onChange={(e) => setNewTranslation(e.target.value)}
                                 placeholder="ترجمه دلخواه"
-                                className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#ff00ea] focus:outline-none dir-rtl"
+                                dir="auto"
+                                className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#ff00ea] focus:outline-none"
                             />
                         </div>
                         <button 

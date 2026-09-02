@@ -1603,17 +1603,17 @@ const App: React.FC = () => {
             </div>
         )}
         {toast.length > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex w-full max-w-md flex-col gap-3 pointer-events-none">
+          <div className="fixed bottom-6 inset-x-0 z-[100] flex flex-col items-center gap-3 pointer-events-none px-4">
             {[...toast].reverse().map(item => (
-              <div key={item.id} className="pointer-events-auto">
+              <div key={item.id} className="pointer-events-auto w-full max-w-md flex justify-center">
                 <Toast message={item.msg} type={item.type} onClose={() => dismissToast(item.id)} />
               </div>
             ))}
           </div>
         )}
         {completionToast && !files.some(f => f.status === AppStatus.PAUSED || f.status === AppStatus.ERROR) && (
-             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-bottom-5 fade-in duration-300 w-full max-w-md px-4">
-                <div className="glass bg-background/95 border border-green-500/50 text-text p-4 rounded-2xl shadow-[0_0_30px_rgba(34,197,94,0.2)] flex items-start gap-4 backdrop-blur-xl">
+             <div className="fixed bottom-6 inset-x-0 z-[60] flex justify-center pointer-events-none px-4 animate-in slide-in-from-bottom-5 fade-in duration-300">
+                <div className="glass bg-background/95 border border-green-500/50 text-text p-4 rounded-2xl shadow-[0_0_30px_rgba(34,197,94,0.2)] flex items-start gap-4 backdrop-blur-xl pointer-events-auto w-full max-w-md">
                     <div className="p-2 bg-green-500/20 rounded-full flex-shrink-0 mt-0.5"><Loader2 className="w-5 h-5 text-green-500" /></div>
                     <div className="flex-1 min-w-0">
                         <strong className="block text-sm font-bold text-green-500 mb-1">عملیات تکمیل شد</strong>

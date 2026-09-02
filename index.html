@@ -133,6 +133,35 @@
       .animate-pulse-neon {
         animation: pulse-neon 2s infinite;
       }
+
+      /* Intelligent Bi-Directional Alignment */
+      [dir="auto"],
+      input[dir="auto"],
+      textarea[dir="auto"] {
+        unicode-bidi: plaintext;
+        text-align: start;
+      }
+
+      /* Placeholder respects element direction & text alignment */
+      input::placeholder,
+      textarea::placeholder {
+        direction: inherit;
+        text-align: inherit;
+        unicode-bidi: plaintext;
+      }
+
+      /* Explicit directional utilities */
+      [dir="ltr"],
+      .dir-ltr {
+        direction: ltr !important;
+        text-align: left !important;
+      }
+
+      [dir="rtl"],
+      .dir-rtl {
+        direction: rtl !important;
+        text-align: right !important;
+      }
     </style>
 </head>
   <body>
