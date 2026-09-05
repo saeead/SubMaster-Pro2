@@ -375,13 +375,14 @@ export const getSmartContextWindow = (
   blocks: SubtitleBlock[],
   targetStart: number,
   targetEndExclusive: number,
-  maxContextBlocks: number = 4
+  maxContextBlocks: number = 6
 ): { contextStart: number; contextEnd: number } => {
-  // Always include at least 1-2 blocks of preceding context if available,
-  // then expand further back if the boundary is in the middle of a sentence.
-  const minContext = Math.min(2, maxContextBlocks);
-  let contextStart = Math.max(0, targetStart - minContext);
-  let contextEnd = Math.min(blocks.length, targetEndExclusive + minContext);
+  // Always include at least 3 blocks of preceding context if available,
+  // so the model maintains narrative flow, tone, and character continuity.
+  const minPreContext = Math.min(targetStart, Math.max(3, Math.min(5, maxContextBlocks)));
+  let contextStart = Math.max(0, targetStart - minPreContext);
+  const minPostContext = Math.min(blocks.length - targetEndExclusive, Math.min(2, maxContextBlocks));
+  let contextEnd = Math.min(blocks.length, targetEndExclusive + minPostContext);
 
   while (
     contextStart > 0 &&
@@ -411,7 +412,7 @@ export const smartChunking = (blocks: SubtitleBlock[], chunkSize: number = BATCH
 
   while (i < blocks.length) {
     const targetEnd = findOptimalChunkBoundary(blocks, i, chunkSize);
-    const { contextStart, contextEnd } = getSmartContextWindow(blocks, i, targetEnd, OVERLAP_SIZE + 3);
+    const { contextStart, contextEnd } = getSmartContextWindow(blocks, i, targetEnd, Math.max(6, OVERLAP_SIZE + 3));
     const start = contextStart;
     const end = contextEnd;
     const chunkBlocks = blocks.slice(start, end);
@@ -468,7 +469,7 @@ export const paragraphChunking = (blocks: SubtitleBlock[], maxChars: number = PA
     }
 
     const targetEnd = lastSafeEnd > start && end < blocks.length ? lastSafeEnd : end;
-    const { contextStart, contextEnd } = getSmartContextWindow(blocks, start, targetEnd, OVERLAP_SIZE + 3);
+    const { contextStart, contextEnd } = getSmartContextWindow(blocks, start, targetEnd, Math.max(6, OVERLAP_SIZE + 3));
     const chunkBlocks = blocks.slice(contextStart, contextEnd);
     chunks.push({
       id: chunks.length,

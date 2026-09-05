@@ -182,9 +182,9 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                 <div className="text-right">
                     <span className={`text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full border 
                         ${isCompleted ? 'text-green-400 bg-green-400/10 border-green-400/20' : 
-                          isCancelled ? 'text-red-400 bg-red-400/10 border-red-400/20' :
+                          isCancelled ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' :
                           'text-[#00f0ff] bg-[#00f0ff]/10 border-[#00f0ff]/20'}`}>
-                        {activeFile.progressMessage || (isProcessing ? 'در حال ترجمه...' : 'آماده پردازش')}
+                        {activeFile.progressMessage || (isProcessing ? 'در حال ترجمه...' : (isCancelled ? 'لغو شده (آماده ادامه)' : (isPaused ? 'متوقف شده (آماده ادامه)' : 'آماده پردازش')))}
                     </span>
                 </div>
                 <div className="text-right">
@@ -210,7 +210,7 @@ export const StatsCard: React.FC<StatsCardProps> = ({
             </div>
         </div>
 
-        {!isProcessing && (isReady || isPaused || isError) && (
+        {!isProcessing && (isReady || isPaused || isCancelled || isError) && (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div>
@@ -325,13 +325,13 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              )}
 
              {/* Start / Resume */}
-             {(isReady || isPaused || isError) && !hasErrors && (
+             {(isReady || isPaused || isCancelled || isError) && !hasErrors && (
                  <button 
                     onClick={onStart}
                     className="flex items-center justify-center gap-2 h-10 px-6 rounded-xl bg-gradient-to-r from-[#00f0ff] to-[#00c0cc] text-black text-sm font-semibold whitespace-nowrap shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_25px_rgba(0,240,255,0.5)] transition-all transform hover:-translate-y-0.5"
                  >
                     <Play className="w-4 h-4 fill-current" />
-                    <span>{totalFiles > 1 ? 'ترجمه نوبتی' : (isPaused ? 'ادامه ترجمه' : 'شروع ترجمه')}</span>
+                    <span>{totalFiles > 1 ? 'ترجمه نوبتی' : ((isPaused || isCancelled) ? 'ادامه ترجمه' : 'شروع ترجمه')}</span>
                  </button>
              )}
 

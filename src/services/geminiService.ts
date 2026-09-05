@@ -363,8 +363,9 @@ PAST CONTEXT (Reference only):
 ${JSON.stringify(contextPre)}
 
 CRITICAL BOUNDARY CONTINUITY & SEAMLESS STITCHING:
-- The LAST item in PAST CONTEXT immediately precedes TARGET BATCH in dialogue.
-- If the first item of TARGET BATCH continues a sentence, clause, or conversational thought from the last item of PAST CONTEXT, you MUST ensure that its grammar, verb tense, pronouns, and tone (formal/colloquial) connect seamlessly with the previous translation, without abrupt cuts or grammatical orphans.`;
+- The items in PAST CONTEXT (last 3+ subtitle cues with their existing translations) immediately precede TARGET BATCH in dialogue.
+- Study these previous translations carefully to maintain strict consistency in topic, narrative thread, terminology, character names, formal/colloquial tone, and pronoun gender. Do NOT lose the train of thought or diverge from the established context.
+- If the first item of TARGET BATCH continues a sentence, clause, or conversational thought from the last items of PAST CONTEXT, you MUST ensure that its grammar, verb tense, pronouns, and tone connect seamlessly without abrupt cuts or grammatical orphans.`;
     }
     prompt += `
 
@@ -394,8 +395,9 @@ PAST CONTEXT (reference only; do not translate these IDs):
 ${toMarkedSubtitleParagraph(contextPre)}
 
 CRITICAL BOUNDARY CONTINUITY & SEAMLESS STITCHING:
-- The last cue in PAST CONTEXT immediately precedes the first cue of TARGET MARKED PARAGRAPH.
-- If the first target cue continues a sentence, clause, or thought from that last cue, stitch it seamlessly with matching grammar, person/pronouns, and tone.
+- The cues in PAST CONTEXT (last 3+ subtitle cues with their existing translations) immediately precede the first cue of TARGET MARKED PARAGRAPH.
+- Study these previous translations carefully to maintain strict consistency in topic, narrative thread, character names, formal/colloquial tone, and pronoun gender. Do NOT lose the train of thought.
+- If the first target cue continues a sentence, clause, or thought from the last cue, stitch it seamlessly with matching grammar, person/pronouns, and tone.
 `;
   }
   prompt += `

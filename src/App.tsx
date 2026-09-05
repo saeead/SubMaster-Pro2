@@ -99,9 +99,11 @@ const App: React.FC = () => {
      if (settings.theme === 'light') {
          root.setAttribute('data-theme', 'light');
          root.classList.remove('dark');
+         root.classList.add('light');
      } else {
          root.removeAttribute('data-theme');
          root.classList.add('dark');
+         root.classList.remove('light');
      }
   }, [settings.theme]);
 
@@ -171,6 +173,22 @@ const App: React.FC = () => {
     const fileName = `${file.name.replace(/\.[^/.]+$/, "")}_backup.json`;
     downloadFile(fileName, jsonString);
     showToast('فایل پشتیبان پروژه دانلود شد.', 'success');
+  };
+
+  // Automatically save state to LocalStorage and trigger JSON file download on pause or cancel
+  const autoExportProjectState = (fileToExport: SubtitleFile, reason: 'paused' | 'cancelled') => {
+    try {
+      const state: ProjectState = buildProjectStateFromFile(fileToExport);
+      ProjectStateManager.saveProjectState(fileToExport.id, state);
+      setSavedProjects(ProjectStateManager.listSavedProjects());
+
+      const baseName = fileToExport.name.replace(/\.[^/.]+$/, "");
+      const fileName = `${baseName}_${reason}_backup.json`;
+      const jsonString = JSON.stringify(state, null, 2);
+      downloadFile(fileName, jsonString);
+    } catch (err) {
+      console.error('Failed to auto-export project state:', err);
+    }
   };
 
 
@@ -1108,9 +1126,27 @@ const App: React.FC = () => {
         }
 
         const chunk = chunks[i];
-        const preContextBlocks = chunk.blocks.slice(0, chunk.targetStartIndex);
         const targetBlocks = chunk.blocks.slice(chunk.targetStartIndex, chunk.targetEndIndex);
         const postContextBlocks = chunk.blocks.slice(chunk.targetEndIndex);
+
+        // Fetch latest state of blocks from filesRef to include actual existing translations for preceding context
+        const currentFile = filesRef.current.find(f => f.id === fileId) || file;
+        const currentBlocks = currentFile.blocks;
+        const targetFirstId = targetBlocks[0]?.id;
+        const fileTargetIndex = targetFirstId !== undefined 
+          ? currentBlocks.findIndex(b => b.id === targetFirstId)
+          : -1;
+
+        // Ensure at least 3 blocks (up to 6) of preceding context with their actual translatedText
+        let preContextBlocks: SubtitleBlock[] = [];
+        if (fileTargetIndex > 0) {
+          const desiredPreCount = Math.min(fileTargetIndex, Math.max(3, chunk.targetStartIndex));
+          const preStartIndex = Math.max(0, fileTargetIndex - desiredPreCount);
+          preContextBlocks = currentBlocks.slice(preStartIndex, fileTargetIndex);
+        } else {
+          preContextBlocks = chunk.blocks.slice(0, chunk.targetStartIndex);
+        }
+
         const blockRangeMessage = targetBlocks.length > 0
             ? `بلوک‌های ${targetBlocks[0].index} تا ${targetBlocks[targetBlocks.length - 1].index}`
             : 'بدون بلوک هدف';
@@ -1149,9 +1185,13 @@ const App: React.FC = () => {
                 // Both branches return promises. Await the selected request before
                 // iterating its mapped results; otherwise Skeleton STR leaves a
                 // Promise here and `results.forEach` crashes the React flow.
+                const taggedContextBlocks = [...preContextBlocks, ...targetBlocks, ...postContextBlocks];
+                const taggedTargetStartIndex = preContextBlocks.length;
+                const taggedTargetEndIndex = taggedTargetStartIndex + targetBlocks.length;
+
                 const results = await (isSkeletonMethod
                     ? (() => {
-                        return translateTaggedBatchWithRecovery(effectiveTarget, chunk.blocks, chunk.targetStartIndex, chunk.targetEndIndex, isSubtitleTranslatorMethod, signal);
+                        return translateTaggedBatchWithRecovery(effectiveTarget, taggedContextBlocks, taggedTargetStartIndex, taggedTargetEndIndex, isSubtitleTranslatorMethod, signal);
                       })()
                     : translateBatch(targetRequest, preContextReq, postContextReq, settingsRef.current, onKeyRateLimit, isParagraphMethod, signal));
 
@@ -1314,9 +1354,11 @@ const App: React.FC = () => {
     }
 
     const pendingFiles = filesRef.current.filter(f =>
-        f.status === AppStatus.READY || 
+        (f.status === AppStatus.READY || 
         f.status === AppStatus.ERROR || 
-        f.status === AppStatus.PAUSED
+        f.status === AppStatus.PAUSED ||
+        f.status === AppStatus.CANCELLED) &&
+        f.blocks.some(b => !b.translatedText || b.translatedText.trim() === '')
     );
     
     if (pendingFiles.length === 0) {
@@ -1324,7 +1366,11 @@ const App: React.FC = () => {
         return;
     }
 
-    const firstFileId = pendingFiles[0].id;
+    const activeFile = filesRef.current.find(f => f.id === activeFileId);
+    const targetFile = (activeFile && pendingFiles.some(f => f.id === activeFile.id))
+      ? activeFile
+      : pendingFiles[0];
+    const firstFileId = targetFile.id;
     updateFileStatus(firstFileId, {
         status: AppStatus.TRANSLATING, 
         progressMessage: activeSettings.aiProvider === 'lm_studio' ? 'در حال بررسی اتصال به LM Studio...' : activeSettings.aiProvider === 'openai_compatible' ? 'در حال بررسی اتصال به سرویس OpenAI Compatible...' : isKeylessProvider ? 'در حال بررسی اتصال به سرویس ترجمه...' : 'در حال بررسی اتصال به سرور گوگل (DNS/VPN)...'
@@ -1388,13 +1434,34 @@ const App: React.FC = () => {
     isPausedRef.current = true; 
     autoPipelineActiveRef.current = false;
     jobRunnerRef.current?.pauseActive();
+
+    const currentFile = filesRef.current.find(f => f.id === activeFileId);
+    if (currentFile) {
+      const updated = { ...currentFile, status: AppStatus.PAUSED, progressMessage: 'توقف موقت', activeTranslationBlockIds: [] };
+      autoExportProjectState(updated, 'paused');
+    }
     
-    setFiles(prev => prev.map(f => f.status === AppStatus.TRANSLATING ? { ...f, status: AppStatus.PAUSED, progressMessage: 'توقف موقت', activeTranslationBlockIds: [] } : f));
+    setFiles(prev => prev.map(f => {
+      if (f.status === AppStatus.TRANSLATING) {
+        const updated = { ...f, status: AppStatus.PAUSED, progressMessage: 'توقف موقت', activeTranslationBlockIds: [] };
+        if (f.id !== activeFileId) {
+          autoExportProjectState(updated, 'paused');
+        }
+        return updated;
+      }
+      return f;
+    }));
     
-    showToast('پروژه متوقف شد؛ وضعیت ترجمه به‌صورت خودکار ذخیره می‌شود.', 'warning');
+    showToast('پروژه متوقف شد؛ وضعیت ذخیره و فایل پشتیبان JSON برای ادامه کار دانلود شد.', 'warning');
   };
 
   const cancelCurrentTranslation = () => {
+    const currentFile = filesRef.current.find(f => f.id === activeFileId);
+    if (currentFile) {
+      const updated = { ...currentFile, status: AppStatus.CANCELLED, progressMessage: 'لغو شد', activeTranslationBlockIds: [] };
+      autoExportProjectState(updated, 'cancelled');
+    }
+
     if (!jobRunnerRef.current || !jobRunnerRef.current.isProcessing()) {
       if (activeFileId) {
         updateFileStatus(activeFileId, {
@@ -1406,10 +1473,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const currentFile = filesRef.current.find(f => f.id === activeFileId);
     const hasMoreInQueue = jobRunnerRef.current.getQueueLength() > 0;
-
-    // Abort active job in the runner, allowing queue to immediately continue with next files
     jobRunnerRef.current.cancelActive();
 
     if (activeFileId) {
@@ -1423,13 +1487,13 @@ const App: React.FC = () => {
     if (hasMoreInQueue) {
       showToast(
         currentFile 
-          ? `ترجمه "${currentFile.name}" لغو شد؛ ترجمه فایل بعدی در صف بلافاصله آغاز می‌شود...` 
-          : 'ترجمه فایل جاری لغو شد؛ ترجمه فایل بعدی در صف بلافاصله آغاز می‌شود...',
+          ? `ترجمه "${currentFile.name}" لغو و فایل JSON ذخیره شد؛ ترجمه فایل بعدی در صف آغاز می‌شود...` 
+          : 'ترجمه فایل جاری لغو شد؛ ترجمه فایل بعدی در صف آغاز می‌شود...',
         'info'
       );
     } else {
       isTranslatingRef.current = false;
-      showToast('ترجمه فایل جاری لغو شد.', 'warning');
+      showToast('ترجمه فایل جاری لغو شد و فایل JSON برای ادامه کار دانلود گردید.', 'warning');
     }
   };
 
@@ -1438,12 +1502,20 @@ const App: React.FC = () => {
     isPausedRef.current = false; 
     autoPipelineActiveRef.current = false;
     jobRunnerRef.current?.cancelAll();
+
+    filesRef.current.forEach(f => {
+      if (f.status === AppStatus.TRANSLATING || f.status === AppStatus.PAUSED || f.progressMessage?.includes('صف')) {
+        const updated = { ...f, status: AppStatus.CANCELLED, progressMessage: 'لغو شد', activeTranslationBlockIds: [] };
+        autoExportProjectState(updated, 'cancelled');
+      }
+    });
+
     setFiles(prev => prev.map(f => 
         (f.status === AppStatus.TRANSLATING || f.status === AppStatus.PAUSED || f.progressMessage?.includes('صف')) 
         ? { ...f, status: AppStatus.CANCELLED, progressMessage: 'لغو شد', activeTranslationBlockIds: [] } 
         : f
     ));
-    showToast('ترجمه تمام فایل‌های صف لغو شد.', 'warning');
+    showToast('ترجمه تمام فایل‌های صف لغو شد و فایل JSON برای ادامه کار دانلود گردید.', 'warning');
   };
 
   const cancelTranslation = () => {
