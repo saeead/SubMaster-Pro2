@@ -1087,7 +1087,8 @@ export const translateBatch = async (
         settings.glossary,
         settings.doNotTranslateTerms,
         settings.targetLanguage,
-        promptMethod
+        promptMethod,
+        settings.aiProvider
       );
 
       if (isFreeProvider(settings.aiProvider)) {
@@ -1422,7 +1423,9 @@ export const retranslateSelectedBlocks = async (
     settings.outputStandard,
     settings.glossary,
     settings.doNotTranslateTerms,
-    settings.targetLanguage
+    settings.targetLanguage,
+    'default',
+    settings.aiProvider
   );
 
   let modelName = APP_CONFIG.geminiModels.standard;
@@ -1604,7 +1607,8 @@ export const translateSkeletonPayload = async (content: string, settings: AppSet
     settings.glossary,
     settings.doNotTranslateTerms,
     settings.targetLanguage,
-    settings.translationMethod === 'subtitle_translator' ? 'subtitle_translator' : 'skeleton_str'
+    settings.translationMethod === 'subtitle_translator' ? 'subtitle_translator' : 'skeleton_str',
+    settings.aiProvider
   );
   const persianOrthographyInstruction = settings.targetLanguage === 'fa'
     ? '\nFor Persian output, preserve and use the real zero-width non-joiner (U+200C) wherever Persian orthography requires it. Write, for example, می‌رود, نمی‌دانم, کتاب‌ها, بهینه‌تر, and برنامه‌نویسی; never replace the half-space with a normal space, hyphen, tatweel, or nothing.'

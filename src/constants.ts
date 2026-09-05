@@ -334,7 +334,7 @@ ${protectedTerms.map(t => `"${t}"`).join(', ')}
   return sections.join('\n\n');
 };
 
-export const getSystemInstruction = (
+export const getLocalSystemInstruction = (
   tone: ToneType, 
   topic: TopicType, 
   customPrompt: string, 
@@ -344,6 +344,197 @@ export const getSystemInstruction = (
   targetLanguage: TargetLanguage = 'fa',
   method: TranslationMethod = 'default'
 ): string => {
+  const isPersian = targetLanguage === 'fa';
+  const langName = TARGET_LANGUAGES[targetLanguage] || 'Persian';
+
+  // 1. Role: Senior Subtitle Localization Specialist
+  const role = isPersian
+    ? `شما یک مترجم ارشد و متخصص بومی‌سازی زیرنویس هستید (فیلم، سریال، محتوای آموزشی و مستند). ترجمه شما باید چنان طبیعی، زنده، جذاب و با ریتم روان فارسی باشد که گویی دیالوگ از ابتدا به زبان فارسی نوشته شده است.`
+    : `You are a senior subtitle localization specialist. Translate dialogue naturally, accurately, and idiomatically into ${langName}. The subtitles must sound authentically native, punchy, and engaging.`;
+
+  // 2. 3-4 Golden Quality Rules
+  const goldenRules = isPersian
+    ? `--- اصول طلایی کیفیت زیرنویس ---
+۱. اصالت، جذابیت و لحن طبیعی: پرهیز مطلق از ترجمه مکانیکی و تحت‌اللفظی؛ عبارات باید خوش‌آهنگ، گیرا و منطبق با بافت صحنه باشند (حذف کامل الگوهای ترجمه‌زده نظیر «توسط»، «می‌باشد»، «صورت گرفت»).
+۲. امانت‌داری کامل معنا و ممنوعیت خلاصه‌سازی: انتقال کامل و مو‌به‌مو تمام جزئیات، اسامی، اعداد، شوخی‌ها، کنایه‌ها و قیدها؛ هرگونه سانسور، حذف یا خلاصه‌سازی حتی یک واژه اکیداً ممنوع است.
+۳. دقت مفهومی، علمی و آموزشی: در محتوای آموزشی و فنی، مفاهیم با بالاترین دقت علمی و با معادل‌های استاندارد بومی‌سازی شوند و روابط علّی و منطقی بدون کوچک‌ترین خطا حفظ گردند.
+۴. مهندسی متن زیرنویس: ساختار متوازن و خوانا در چارچوب استانداردهای پخش بدون آسیب به بار عاطفی و معنایی جمله.`
+    : `--- 4 GOLDEN SUBTITLE QUALITY RULES ---
+1. Idiomatic & Native Flow: Never translate word-for-word or use clumsy translationese. Dialogue must flow with natural, engaging spoken rhythm.
+2. Complete Semantic Fidelity: Preserve every detail, name, number, joke, idiom, and emotional nuance without summarization, omission, or truncation.
+3. Conceptual & Educational Precision: For technical, scientific, and educational topics, maintain rigorous accuracy and authoritative terminology.
+4. Clean Subtitle Engineering: Keep phrasing concise, balanced, and instantly readable within standard viewer constraints.`;
+
+  // 3. Persian Orthography Rules
+  const persianRules = isPersian
+    ? `--- الزامات نگارش و ویرایش فارسی ---
+• نیم‌فاصله الزامی (ZWNJ): در افعال (می‌روم، نمی‌دانم، گفته‌شده)، نشانه‌های جمع (کتاب‌ها)، واژگان ترکیبی (بهینه‌سازی، برنامه‌نویسی) و پیشوندها/پسوندهای پیوسته.
+• حروف و دستور معیار: استفاده از «ی» و «ک» استاندارد فارسی؛ رعایت ترتیب طبیعی ارکان جمله فارسی (نهاد، مفعول، قید، فعل).`
+    : '';
+
+  // 4. Tone specifications
+  let toneInstruction = '';
+  if (isPersian) {
+    if (tone === 'conversational' || tone === 'movie') {
+      toneInstruction = `--- لحن دیالوگ: محاوره‌ای و سینمایی پرکشش ---
+• زبان گفتاری عامیانه، طبیعی و پرانرژی؛ تبدیل واژگان متداول به فرم گفتاری تهرانی (خونه، می‌شه، می‌خوای، براتون، رفتیم) و بومی‌سازی جذاب اصطلاحات کوچه و بازاری (Slang).`;
+    } else if (tone === 'formal') {
+      toneInstruction = `--- لحن: رسمی، فاخر و شیوا ---
+• نگارش کتابی پیراسته، وزین و برازنده متون رسمی، تاریخی و مستندهای فاخر.`;
+    } else if (tone === 'news') {
+      toneInstruction = `--- لحن: خبری و ژورنالیستی ---
+• قاطع، شفاف، بی‌طرف و با نگارش دقیق رسانه‌ای.`;
+    } else if (tone === 'podcast') {
+      toneInstruction = `--- لحن: صمیمی و روان پادکست ---
+• گرم، راحت، رفیقانه و متناسب با آهنگ گفتگوی زنده پادکست.`;
+    }
+  } else {
+    toneInstruction = `Tone: ${tone}. Keep the register natural, authentic, and subtitle-friendly for ${langName}.`;
+  }
+
+  // Topic specifications
+  let topicInstruction = '';
+  if (topic === 'educational') {
+    topicInstruction = isPersian
+      ? `--- راهنمای موضوع: آموزشی، علمی و تخصصی ---
+• درک عمیق و انتقال دقیق مفاهیم، فرآیندها و روابط علمی با واژگان معتبر و تخصصی. نام متغیرها، کدهای برنامه‌نویسی و فرمول‌ها تغییرناپذیرند.`
+      : `Topic: Educational & Scientific. Ensure authoritative technical precision; never alter code, variables, or formulas.`;
+  } else if (topic === 'entertainment') {
+    topicInstruction = isPersian
+      ? `--- راهنمای موضوع: سرگرمی و سینمایی ---
+• بومی‌سازی طنزها، متلک‌ها و اصطلاحات نمایشی با حفظ ضرباهنگ دراماتیک صحنه.`
+      : `Topic: Entertainment. Retain comedic timing, punchlines, and dramatic flair.`;
+  } else if (topic === 'sports') {
+    topicInstruction = isPersian
+      ? `--- راهنمای موضوع: ورزشی ---
+• لحن گزارشگری پرانرژی با کاربرد عبارات رایج در پخش مسابقات ورزشی.`
+      : `Topic: Sports. Energetic sportscasting register with accurate sports terms.`;
+  }
+
+  // Output Standard limits
+  let standardInstruction = '';
+  if (outputStandard === 'netflix') {
+    standardInstruction = isPersian
+      ? `--- استاندارد NETFLIX ---
+• سقف ۴۲ کاراکتر در خط، حداکثر ۲ خط در هر بلاک، سرعت خواندن زیر ۲۰ کاراکتر بر ثانیه.`
+      : `Standard: Netflix (max 42 chars/line, 2 lines max, <20 CPS).`;
+  } else if (outputStandard === 'bbc') {
+    standardInstruction = isPersian
+      ? `--- استاندارد BBC ---
+• سقف ۳۷ کاراکتر در خط، حداکثر ۲ خط در هر بلاک، سرعت خواندن زیر ۱۷ کاراکتر بر ثانیه.`
+      : `Standard: BBC (max 37 chars/line, 2 lines max, <17 CPS).`;
+  } else if (outputStandard === 'broadcast') {
+    standardInstruction = isPersian
+      ? `--- استاندارد BROADCAST ---
+• سقف ۳۹ کاراکتر در خط، حداکثر ۲ خط در هر بلاک، سرعت خواندن زیر ۱۸ کاراکتر بر ثانیه.`
+      : `Standard: Broadcast (max 39 chars/line, 2 lines max, <18 CPS).`;
+  }
+
+  // Glossary
+  let glossaryInstruction = '';
+  if (glossary && glossary.length > 0) {
+    const valid = glossary.filter(g => g && g.term && g.translation);
+    if (valid.length > 0) {
+      glossaryInstruction = `--- واژه‌نامه الزامی (STRICT GLOSSARY) ---
+استفاده از این معادل‌ها برای واژگان ذکرشده دارای اولویت مطلق و اجباری است:
+${valid.map(g => `• "${g.term}" ➔ "${g.translation}"`).join('\n')}`;
+    }
+  }
+
+  // Protected terms
+  let protectedInstruction = '';
+  if (doNotTranslateTerms) {
+    const terms = doNotTranslateTerms.split(',').map(t => t.trim()).filter(Boolean);
+    if (terms.length > 0) {
+      protectedInstruction = `--- واژگان محافظت‌شده (غیرقابل ترجمه) ---
+واژگان زیر اسامی خاص، علائم تجاری یا اصطلاحات اختصاصی هستند و باید عیناً با حروف لاتین حفظ شوند:
+${terms.map(t => `"${t}"`).join(', ')}`;
+    }
+  }
+
+  // Custom prompt
+  let customInstruction = '';
+  if (customPrompt && customPrompt.trim()) {
+    customInstruction = `--- دستورالعمل سفارشی کاربر ---\n${customPrompt.trim()}`;
+  }
+
+  // Contract & Output Format:
+  let contractAndExamples = '';
+  if (method === 'skeleton_str' || method === 'subtitle_translator') {
+    contractAndExamples = isPersian
+      ? `--- قرارداد خروجی تگ‌ها ---
+دقیقاً تگ‌های شماره‌دار [TRANSLATE_X]...[/TRANSLATE_X] درخواستی را بازگردانید. از تولید JSON، توضیحات یا مارک‌داون خودداری کنید.`
+      : `--- TAG OUTPUT CONTRACT ---
+Return ONLY the requested [TRANSLATE_X]...[/TRANSLATE_X] tags. Do NOT return JSON, explanations, or markdown.`;
+  } else {
+    // Default or paragraph methods: Strict JSON array with few-shot examples
+    contractAndExamples = isPersian
+      ? `--- فرمت خروجی الزامی (JSON Array) ---
+پاسخ شما باید فقط و فقط یک آرایه JSON معتبر باشد؛ اکیداً بدون هیچ مقدمه، موخره، یادداشت یا بلوک مارک‌داون (\`\`\`json):
+[
+  { "id": 1, "translatedText": "متن ترجمه‌شده" }
+]
+
+--- مثال‌های آموزشی (Few-Shot Examples) ---
+• مثال ۱ (دیالوگ محاوره‌ای و جذاب فیلم/سریال):
+ورودی: [{"id": 1, "text": "Are you out of your mind? We cannot pull this off now!"}]
+خروجی: [{"id": 1, "translatedText": "مگه عقلت رو از دست دادی؟ الان دیگه از پسش برنمی‌آیم!"}]
+
+• مثال ۲ (آموزشی، علمی و اصطلاحات تخصصی):
+ورودی: [{"id": 2, "text": "The neural network optimizes gradient descent by iteratively updating weights."}]
+خروجی: [{"id": 2, "translatedText": "شبکه عصبی از طریق به‌روزرسانی مکرر وزن‌ها، گرادیان نزولی را بهینه‌سازی می‌کند."}]`
+      : `--- OUTPUT FORMAT (JSON Array) ---
+Output ONLY a valid JSON array, with no explanations, notes, or markdown wrappers:
+[
+  { "id": 1, "translatedText": "..." }
+]
+
+Example:
+Input: [{"id": 1, "text": "Are you out of your mind? We cannot pull this off now!"}]
+Output: [{"id": 1, "translatedText": "Are you insane? We can't manage this now!"}]`;
+  }
+
+  const parts = [
+    role,
+    goldenRules,
+    persianRules,
+    toneInstruction,
+    topicInstruction,
+    standardInstruction,
+    glossaryInstruction,
+    protectedInstruction,
+    customInstruction,
+    contractAndExamples
+  ].filter(Boolean);
+
+  return parts.join('\n\n');
+};
+
+export const getSystemInstruction = (
+  tone: ToneType, 
+  topic: TopicType, 
+  customPrompt: string, 
+  outputStandard: OutputStandard,
+  glossary: GlossaryItem[] = [],
+  doNotTranslateTerms: string = '',
+  targetLanguage: TargetLanguage = 'fa',
+  method: TranslationMethod = 'default',
+  provider?: AIProvider | string
+): string => {
+  const isLocal = provider === 'lm_studio' || (method as string) === 'lm_studio';
+  if (isLocal) {
+    return getLocalSystemInstruction(
+      tone,
+      topic,
+      customPrompt,
+      outputStandard,
+      glossary,
+      doNotTranslateTerms,
+      targetLanguage,
+      method
+    );
+  }
+
   const core = getCoreSystemInstruction(targetLanguage, method);
   const dynamic = getDynamicSystemInstruction(
     tone, 
