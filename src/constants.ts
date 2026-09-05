@@ -60,6 +60,8 @@ export const BATCH_SIZE = 20;
 export const SKELETON_STR_BATCH_SIZE = 36;
 export const SKELETON_STR_CONTEXT_WINDOW = 40;
 export const OVERLAP_SIZE = 1;
+export const GEMINI_CONTEXT_PRE_WINDOW = 3;
+export const GEMINI_CONTEXT_POST_WINDOW = 2;
 export const DELAY_BETWEEN_BATCHES_MS = 4200; 
 export const DELAY_BETWEEN_FILES_MS = 10000; 
 
@@ -77,6 +79,23 @@ export const getAdaptiveTranslationBatchSize = (provider: AIProvider, model: Mod
     if (provider === 'gtx' || provider === 'edge' || provider === 'deeplx') return 10;
     return 20;
   }
+
+  // Gemini-specific adaptive batch sizing:
+  // Slightly larger for flash/flash_lite (token & throughput efficiency)
+  // and more conservative for professional (nuance, quality, and reasoning).
+  if (provider === 'gemini') {
+    if (method === 'paragraph') {
+      if (model === 'professional') return 10;
+      if (model === 'flash' || model === 'flash_lite') return 24;
+      return 18;
+    }
+    // Default method for Gemini
+    if (model === 'professional') return 12;
+    if (model === 'flash' || model === 'flash_lite') return 42;
+    return 24;
+  }
+
+  // Non-Gemini providers: preserve exact previous logic
   if (method === 'paragraph') return model === 'professional' ? 12 : 16;
   if (provider === 'lm_studio') return 36;
   if (provider === 'gtx' || provider === 'edge' || provider === 'deeplx') return 12;
@@ -127,57 +146,192 @@ export const TOPIC_TEMPERATURE_DEFAULTS: Record<TopicType, { value: number; desc
   sports: { value: 0.55, description: "حفظ هیجان و واژگان تخصصی ورزشی" }
 };
 
-const SYSTEM_PROMPTS = {
-  base: `شما یک مترجم ارشد و متخصص بومی‌سازی (Localization) هستید. وظیفه شما ترجمه "روح کلام" است، نه فقط جایگزینی کلمات.
+/**
+ * Calculates dynamic temperature for Gemini requests based on topic defaults, selected tone,
+ * model tier, and retry attempts due to validation/parsing errors.
+ * 
+ * - Topic & Tone: Maintains dynamic semantic flavor (e.g. conversational/movie get idiomatic fluidity, news/formal stay disciplined).
+ * - Model Tier: Flash & Flash-Lite receive a slight boost (+0.05) to promote natural translationese-free flow
+ *   while constrained by Structured Output (responseSchema). Professional receives a slight reduction (-0.05)
+ *   to maximize analytical precision and contextual consistency.
+ * - Validation Retries: Progressively lowers temperature (-0.10 per validation retry) to enforce deterministic,
+ *   strict compliance with IDs and schema when recovery is needed.
+ */
+export const getGeminiTemperature = (
+  baseTemp: number | undefined,
+  topic: TopicType,
+  tone: ToneType,
+  model: ModelType,
+  validationRetryCount: number = 0
+): number => {
+  const defaultTopicTemp = TOPIC_TEMPERATURE_DEFAULTS[topic]?.value ?? 0.35;
+  let temp = typeof baseTemp === 'number' && !isNaN(baseTemp) ? baseTemp : defaultTopicTemp;
 
---- پروتکل بازبینی هوشمند (Self-Refinement) ---
-1. **حذف ترجمه ماشینی:** از ساختارهای سنگین مانند "توسط" (by) برای مفعول، یا "می‌باشد" به جای "است" پرهیز کنید.
-2. **روانی بومی:** متن باید طوری باشد که انگار یک فارسی‌زبان آن را از ابتدا نوشته است.
-3. **امانت‌داری معنایی:** هیچ جمله، جزئیات، قید، مثال یا رابطه‌ای را حذف، خلاصه یا ساده‌سازیِ مخل نکنید. کوتاهی فقط با حفظ کامل معنا مجاز است.
-4. **زمان‌بندی:** متن را برای زیرنویس خوانا نگه دارید، اما محدودیت زمانی هرگز مجوز حذف محتوا یا خلاصه‌نویسی نیست.
-5. **کیفیت نگارش فارسی:** از نشانه‌گذاری درست، نیم‌فاصله، ترتیب طبیعی اجزای جمله، حذف حشو و انتخاب واژگان حرفه‌ای استفاده کنید.
-6. **پیوستگی متن:** اگر جمله بین چند زیرنویس شکسته شده، مفهوم کامل را از کل بافت دریافت کنید و ترجمه هر بخش را طوری بنویسید که در کنار بخش‌های قبل و بعد طبیعی باشد.`,
+  // Dynamic adjustments by tone: spoken/dramatic require natural flow; formal/news require structural rigor
+  switch (tone) {
+    case 'conversational':
+    case 'movie':
+      temp += 0.05;
+      break;
+    case 'formal':
+    case 'news':
+      temp -= 0.05;
+      break;
+    case 'podcast':
+      temp += 0.03;
+      break;
+    default:
+      break;
+  }
+
+  // Model-tier dynamic balance:
+  // flash & flash_lite are constrained by responseSchema so they benefit from slightly higher creativity (+0.05)
+  // professional has deep reasoning capabilities and benefits from lower temperature (-0.05) for laser accuracy.
+  if (model === 'flash' || model === 'flash_lite') {
+    temp += 0.05;
+  } else if (model === 'professional') {
+    temp -= 0.05;
+  }
+
+  // Validation retry cool-down: reduce temperature to force deterministic structured adherence
+  if (validationRetryCount > 0) {
+    temp -= 0.10 * validationRetryCount;
+  }
+
+  // Clamp within safe creative-yet-structured bounds [0.10, 1.00]
+  return Math.round(Math.max(0.1, Math.min(1.0, temp)) * 100) / 100;
+};
+
+const SYSTEM_PROMPTS = {
+  base: `شما یک مترجم ارشد و متخصص بومی‌سازی زیرنویس هستید. وظیفه شما انتقال طبیعی، دقیق و وفادارانه روح کلام است، نه ترجمه کلمه‌به‌کلمه.
+
+--- اصول بنیادین ترجمه و نگارش ---
+1. بومی‌سازی اصیل: حذف کامل ساختارهای ماشینی و تحت‌اللفظی (پرهیز از «توسط» برای مفعول، استفاده از «است» به‌جای «می‌باشد»).
+2. امانت‌داری معنایی: حفظ کامل جزئیات، قیدها، بار احساسی و پیوستگی؛ هرگونه حذف، خلاصه‌سازی یا تغییر مفاهیم ممنوع است.
+3. نگارش معیار فارسی: رعایت دستور زبان و ترتیب طبیعی اجزای جمله، نشانه‌گذاری دقیق و کاربرد الزامی نیم‌فاصله (ZWNJ) در افعال و واژگان ترکیبی (مانند می‌رود، کتاب‌ها، به‌کارگیری).
+4. پیوستگی دیالوگ‌ها: درک پیوند جملات در خطوط متوالی جهت حفظ ریتم و لحن طبیعی گفتگو.
+5. خروجی پاک: خروجی باید کاملاً خالص باشد؛ اکیداً بدون هیچ مقدمه، موخره، توضیح، پانویس یا علائم مارک‌داون اضافه.`,
 
   netflix: `--- استانداردهای NETFLIX ---
-1. برای رعایت محدودیت 42 کاراکتر در خط، شکست خط و بازنویسیِ هم‌معنا انجام دهید؛ محتوا را خلاصه یا حذف نکنید.
-2. حداکثر 2 خط در هر بلاک.
-3. سرعت خواندن (Reading Speed) نباید از 20 کاراکتر در ثانیه تجاوز کند.`,
+- سقف ۴۲ کاراکتر در خط، حداکثر ۲ خط در هر بلاک با شکست خط مناسب بدون تقطیع یا حذف محتوا.
+- سرعت خواندن: حداکثر ۲۰ کاراکتر بر ثانیه.`,
 
   bbc: `--- استانداردهای BBC ---
-1. محدودیت شدید کاراکتر: حداکثر 37 کاراکتر در هر خط.
-2. خوانایی حداکثری: سرعت خواندن نباید از 17 کاراکتر در ثانیه تجاوز کند.
-3. جملات را با حفظ تمام اطلاعات به شکل خوانا تقسیم کنید؛ هیچ بخشی را حذف یا خلاصه نکنید.`,
+- سقف ۳۷ کاراکتر در خط با شکست خط خوانا بدون خلاصه یا حذف.
+- سرعت خواندن: حداکثر ۱۷ کاراکتر بر ثانیه.`,
 
   broadcast: `--- استانداردهای BROADCAST ---
-1. استاندارد پخش تلویزیونی: حداکثر 39 کاراکتر در هر خط.
-2. تعادل بین دقت و سرعت خواندن (حداکثر 18 کاراکتر بر ثانیه).`,
+- استاندارد پخش: سقف ۳۹ کاراکتر در خط و حداکثر ۱۸ کاراکتر بر ثانیه.`,
 
   tones: {
-    conversational: `--- پروتکل Tehrani Spoken Style (بسیار مهم) ---
-- از زبان محاوره‌ای مدرن و "شکسته" استفاده کنید.
-- تبدیل "ان" به "ون" در کلماتی که رایج است (مثل: "می‌شه"، "می‌تونیم"، "براتون"، "خونه").
-- حذف شناسه‌های رسمی (مثلاً "بخورید" -> "بخورین").
-- حفظ صمیمیت در عین رعایت ادب آموزشی.`,
-
-    formal: `لحن رسمی و کتابی. مناسب برای مستندهای علمی و متون حقوقی.`,
+    conversational: `--- لحن محاوره‌ای (Tehrani Spoken) ---
+- زبان گفتاری روزمره و شکسته (تبدیل «ان» به «ون» در واژگان متداول: خونه، می‌شه، براتون).
+- حذف شناسه‌های رسمی (بخورین، برین) و حفظ صمیمیت طبیعی.`,
+    formal: `لحن رسمی و کتابی، مناسب برای مستندهای علمی و متون دقیق.`,
     news: `لحن خبری، قاطع و بی‌طرفانه.`,
-    movie: `بومی‌سازی فرهنگی اصطلاحات (Slang Preservation).`,
-    podcast: `لحن صمیمی پادکست، حفظ تکیه‌کلام‌ها و ریتم کلام گوینده.`,
+    movie: `لحن سینمایی، بومی‌سازی اصطلاحات عامیانه و حفظ بار دراماتیک (Slang).`,
+    podcast: `لحن صمیمی و روان پادکست، حفظ تکیه‌کلام‌ها و ریتم گوینده.`,
   },
 
   topics: {
-    educational: `--- پروتکل ترجمهٔ آموزشی و علمی ---
-1. پیش از نوشتن، موضوع، رابطهٔ علّی، تعریف‌ها، مراحل و قیدهای علمی را از بافت کامل تشخیص بده؛ هیچ‌کدام را مبهم، عامیانه یا ناقص نکن.
-2. از معادل جاافتاده و دقیق فارسی در منابع آموزشی استفاده کن؛ از ترجمهٔ تحت‌اللفظی، واژه‌سازی بی‌دلیل و برگردانِ کلمه‌به‌کلمه پرهیز کن.
-3. اصطلاح انگلیسی را فقط وقتی در پرانتز بیاور که برای یادگیری یا رفع ابهام ضروری است؛ برای واژه‌های رایج، متن فارسی روان و مستقل بنویس.
-4. نام متغیرها، کد، برندها، فرمول‌ها و اصطلاحاتی که در واژه‌نامه یا فهرست اصطلاحات محافظت‌شده آمده‌اند را دقیقاً حفظ کن.
-5. یک بازبینی نهایی انجام بده: آیا دانشجو بدون دیدن متن مبدأ، مفهوم، هدف و نتیجهٔ هر جمله را دقیق و طبیعی دریافت می‌کند؟`,
-
-    entertainment: `تمرکز بر بومی‌سازی ضرب‌المثل‌ها و شوخی‌ها.`,
-    podcast: `حفظ اسامی برندها و اشخاص به صورت دقیق.`,
-    news: `دقت در ترجمه القاب و نام‌های جغرافیایی.`,
-    sports: `استفاده از ترمینولوژی رایج گزارشگران ورزشی ایران.`,
+    educational: `--- موضوع آموزشی و علمی ---
+- درک دقیق مفاهیم، روابط علّی و مراحل علمی با واژگان تخصصی معتبر.
+- درج اصطلاح انگلیسی در پرانتز فقط در صورت ضرورت یادگیری یا ابهام‌زدایی تخصصی.
+- حفظ کامل نام متغیرها، کدها، فرمول‌ها و برندها.`,
+    entertainment: `بومی‌سازی فرهنگی شوخی‌ها، ضرب‌المثل‌ها و طنز.`,
+    podcast: `حفظ دقیق اسامی افراد، عناوین و پیوستگی کلام.`,
+    news: `دقت در ترجمه القاب رسمی، اصطلاحات سیاسی و نام‌های جغرافیایی.`,
+    sports: `کاربرد اصطلاحات و واژگان رایج گزارشگری ورزشی.`,
   }
+};
+
+/**
+ * Core invariant system instruction:
+ * Invariant role, fundamental quality rules, orthography, and wire contract.
+ * Designed to be cached once via Gemini Context Caching.
+ */
+export const getCoreSystemInstruction = (
+  targetLanguage: TargetLanguage = 'fa',
+  method: TranslationMethod = 'default'
+): string => {
+  const langName = TARGET_LANGUAGES[targetLanguage] || 'Persian';
+  let core = SYSTEM_PROMPTS.base;
+  if (targetLanguage !== 'fa') {
+    core = `You are a senior subtitle localization specialist. Translate dialogue naturally, accurately, and idiomatically into ${langName}. Preserve all nuances, qualifiers, and meaning without summarization or omission. Return strictly the requested output format without explanations or markdown wrappers.`;
+  }
+
+  // Transport and method contract
+  if (method !== 'skeleton_str' && method !== 'subtitle_translator') {
+    core += `\n\n--- فرمت خروجی (JSON Array) ---
+پاسخ فقط یک آرایه JSON معتبر باشد:
+[
+  { "id": 1, "translatedText": "..." }
+]`;
+  }
+
+  core += `\n\n${getMethodTranslationInstruction(method, targetLanguage)}`;
+  return core;
+};
+
+/**
+ * Dynamic system instruction:
+ * Contains request-specific specifications: Tone, Topic, OutputStandard, Glossary, Protected Terms, and Custom Prompt.
+ */
+export const getDynamicSystemInstruction = (
+  tone: ToneType, 
+  topic: TopicType, 
+  customPrompt: string, 
+  outputStandard: OutputStandard,
+  glossary: GlossaryItem[] = [],
+  doNotTranslateTerms: string = '',
+  targetLanguage: TargetLanguage = 'fa'
+): string => {
+  const sections: string[] = [];
+
+  if (outputStandard === 'netflix') sections.push(SYSTEM_PROMPTS.netflix);
+  else if (outputStandard === 'bbc') sections.push(SYSTEM_PROMPTS.bbc);
+  else if (outputStandard === 'broadcast') sections.push(SYSTEM_PROMPTS.broadcast);
+
+  if (targetLanguage === 'fa' && SYSTEM_PROMPTS.tones[tone]) {
+    sections.push(SYSTEM_PROMPTS.tones[tone]);
+  } else if (SYSTEM_PROMPTS.tones[tone]) {
+    sections.push(`Tone: ${tone}. Keep the translation natural and subtitle-friendly for ${TARGET_LANGUAGES[targetLanguage]}.`);
+  }
+
+  if (SYSTEM_PROMPTS.topics[topic]) {
+    sections.push(SYSTEM_PROMPTS.topics[topic]);
+  }
+
+  if (glossary && glossary.length > 0) {
+    const validGlossary = glossary.filter(item => item && item.term && item.translation);
+    if (validGlossary.length > 0) {
+      sections.push(`--- واژه‌نامه اختصاصی و الزام‌آور (STRICT GLOSSARY ENFORCEMENT) ---
+رعایت معادل‌های واژه‌نامه برای واژگان مشخص‌شده اجباری و دارای اولویت مطلق نسبت به هر معادل عام است:
+${validGlossary.map(item => `  • "${item.term}" ➔ "${item.translation}"`).join('\n')}
+قانون تخطی‌ناپذیر واژه‌نامه: در هر خطی که هر یک از عبارات ستون مبدأ ظاهر شود، حتماً و بدون استثنا باید از معادل متناظر آن در ستون مقصد استفاده شود.`);
+    }
+  }
+
+  const protectedTerms = doNotTranslateTerms
+    .split(',')
+    .map(term => term.trim())
+    .filter(Boolean);
+
+  if (protectedTerms.length > 0) {
+    sections.push(`--- کلمات محافظت‌شده و غیرقابل ترجمه (DO-NOT-TRANSLATE SHIELD) ---
+کلمات زیر اسامی خاص، علائم تجاری یا اصطلاحات محافظت‌شده هستند و تغییرناپذیرند:
+${protectedTerms.map(t => `"${t}"`).join(', ')}
+قوانین اکید محافظت:
+۱. این واژه‌ها را هرگز ترجمه نکنید، فینگلیش یا آوانویسی نکنید و املای انگلیسی آنها را عیناً حفظ کنید.
+۲. از تغییر حروف کوچک و بزرگ (Case-sensitivity) و نشانه‌گذاری واژگان محافظت‌شده خودداری کنید.
+۳. در ساختار جمله مقصد، این کلمات را بدون الصاق حروف فارسی (با رعایت فاصله استاندارد) قرار دهید.`);
+  }
+
+  if (customPrompt && customPrompt.trim()) {
+    sections.push(`--- دستورالعمل سفارشی ---\n${customPrompt.trim()}`);
+  }
+
+  return sections.join('\n\n');
 };
 
 export const getSystemInstruction = (
@@ -189,64 +343,39 @@ export const getSystemInstruction = (
   doNotTranslateTerms: string = '',
   targetLanguage: TargetLanguage = 'fa',
   method: TranslationMethod = 'default'
-) => {
-  let prompt = SYSTEM_PROMPTS.base.replace(/Persian|فارسی/g, TARGET_LANGUAGES[targetLanguage] || 'Persian') + '\n\n';
-  // Skeleton STR is a tagged protocol, not JSON. Keeping the JSON schema out
-  // of its system instruction prevents providers from returning an otherwise
-  // valid JSON response that its tagged-response parser cannot place.
-  if (method !== 'skeleton_str' && method !== 'subtitle_translator') {
-    prompt += `فرمت خروجی (JSON Array):
-[
-  {
-    "id": 1,
-    "translatedText": "ترجمه بومی و روان"
-  }
-]\n\n`;
-  }
-  prompt += `--- Target language ---\nTranslate all target subtitle text into ${TARGET_LANGUAGES[targetLanguage]}. Follow native grammar, punctuation, subtitle conventions, and reading direction for this language. Do not force Persian style rules when the target language is not Persian.\n\n`;
-  prompt += getMethodTranslationInstruction(method, targetLanguage) + '\n\n';
-  if (outputStandard === 'netflix') prompt += SYSTEM_PROMPTS.netflix + '\n\n';
-  if (outputStandard === 'bbc') prompt += SYSTEM_PROMPTS.bbc + '\n\n';
-  if (outputStandard === 'broadcast') prompt += SYSTEM_PROMPTS.broadcast + '\n\n';
-
-  if (targetLanguage === 'fa' && SYSTEM_PROMPTS.tones[tone]) prompt += `${SYSTEM_PROMPTS.tones[tone]}\n\n`;
-  else if (SYSTEM_PROMPTS.tones[tone]) prompt += `Tone: ${tone}. Keep the translation native and subtitle-friendly for ${TARGET_LANGUAGES[targetLanguage]}.\n\n`;
-  if (SYSTEM_PROMPTS.topics[topic]) prompt += `${SYSTEM_PROMPTS.topics[topic]}\n\n`;
-
-  if (glossary.length > 0) {
-    prompt += `--- واژه‌نامه اختصاصی ---\n${glossary.map(item => `- ${item.term} -> ${item.translation}`).join('\n')}\n\n`;
-  }
-
-  const protectedTerms = doNotTranslateTerms.split(',').map(term => term.trim()).filter(Boolean);
-  if (protectedTerms.length > 0) {
-    prompt += `--- کلمات استثنا / غیرقابل ترجمه ---\nاین کلمات را دقیقاً با همین املا نگه دار و ترجمه، بومی‌سازی یا آوانویسی نکن: ${protectedTerms.join(', ')}\n\n`;
-  }
-
-  if (customPrompt) prompt += `--- دستورالعمل سفارشی ---\n${customPrompt}\n\n`;
-  
-  return prompt;
+): string => {
+  const core = getCoreSystemInstruction(targetLanguage, method);
+  const dynamic = getDynamicSystemInstruction(
+    tone, 
+    topic, 
+    customPrompt, 
+    outputStandard, 
+    glossary, 
+    doNotTranslateTerms, 
+    targetLanguage
+  );
+  return dynamic ? `${core}\n\n${dynamic}` : core;
 };
 
 /**
- * The transport format changes between the three translation methods, so each
+ * The transport format changes between the translation methods, so each
  * one gets its own contract while sharing the same quality requirements.
  */
 export const getMethodTranslationInstruction = (method: TranslationMethod, targetLanguage: TargetLanguage): string => {
-  const persianWriting = targetLanguage === 'fa'
-    ? 'Use professional Persian orthography: correct punctuation, Persian ی and ک, natural word order, and نیم‌فاصله where required.'
-    : `Use the professional orthography, punctuation, and natural grammar of ${TARGET_LANGUAGES[targetLanguage]}.`;
-  const shared = `Translate completely, naturally, and professionally. Preserve every meaning, detail, qualifier, and relationship from the source; never summarize, omit, or replace a full cue with a short gist. Follow the selected tone, topic, glossary, protected terms, and custom instruction. ${persianWriting} For genuinely specialized terms only, write the natural translation followed by the original source term in parentheses when it improves precision; never add parentheses for ordinary words.`;
-
   if (method === 'paragraph') {
-    return `--- PARAGRAPH METHOD CONTRACT ---\n${shared}\nRead the complete paragraph for context, then translate every marked cue independently and fully. Keep all meaning assigned to its own marker: do not move content to a neighboring cue, merge cues, or finish a later cue early. Subtitle line limits may guide line breaks, never content reduction.`;
+    return `--- PARAGRAPH METHOD CONTRACT ---
+بافت کامل پاراگراف را برای درک بخوانید، سپس هر دیالوگ را با نشانگر شناسهٔ خودش به صورت مستقل ترجمه کنید. جابجایی محتوا به نشانگر دیگر، ادغام، یا خلاصه کردن ممنوع است.`;
   }
   if (method === 'skeleton_str') {
-    return `--- SKELETON STR METHOD CONTRACT ---\n${shared}\nUse context only to understand the passage. Translate every requested tagged line completely, keep exactly one translation per tag, and return no text outside the requested tags.`;
+    return `--- SKELETON STR METHOD CONTRACT ---
+بافت صرفاً برای درک است. تمام تگ‌های شماره‌دار [TRANSLATE_X] را دقیقاً ترجمه کرده و فقط تگ‌های ترجمه‌شده را بازگردانید.`;
   }
   if (method === 'subtitle_translator') {
-    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT ---\n${shared}\nMirror the extraction/translation/reinsertion strategy used by rockbenben/subtitle-translator: structural subtitle data stays local, only dialogue lines inside requested [TRANSLATE_X] tags are translated, surrounding [CONTEXT] lines are for comprehension only, and the response contains exactly one translated tag for each requested source line. Never expose, edit, invent, merge, renumber, or reorder timing, cue, VTT metadata, ASS header/style, or block-boundary data. Persian output must read like professionally written native subtitles: concise, idiomatic, emotionally accurate, and free of machine-translation phrasing.`;
+    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT ---
+فقط خطوط دیالوگ داخل تگ‌های درخواستی [TRANSLATE_X] ترجمه می‌شوند. ساختار، زمان‌بندی و متادیتاها هرگز تغییر نخواهند کرد. دقیقا یک تگ خروجی به ازای هر تگ درخواستی بازگردانید.`;
   }
-  return `--- STANDARD BATCH METHOD CONTRACT ---\n${shared}\nTranslate every requested JSON item completely and return one faithful translation for each ID. Context is for comprehension only and must not cause content from one item to be moved into another.`;
+  return `--- STANDARD BATCH METHOD CONTRACT ---
+هر آیتم JSON را با وفاداری کامل و بدون خلاصه‌سازی ترجمه کرده و دقیقاً یک ترجمه طبیعی برای هر شناسه بازگردانید.`;
 };
 
 export const LANGUAGE_PROMPTS: Record<TargetLanguage, string> = {

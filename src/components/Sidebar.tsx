@@ -86,14 +86,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Main Sidebar Panel */}
       <aside
-        className={`fixed inset-y-0 right-0 z-50 flex h-full w-[22rem] flex-col border-l border-[#1e2a5e] bg-[var(--bg-elevated)] shadow-2xl transition-all duration-300 ease-out md:static md:h-screen md:w-[22rem] md:translate-x-0 md:bg-surface/30 md:shadow-none md:backdrop-blur-xl ${
+        className={`fixed inset-y-0 right-0 z-50 flex h-full w-[22rem] flex-col border-l border-border bg-[var(--bg-elevated)] shadow-2xl transition-all duration-300 ease-out md:static md:h-screen md:w-[22rem] md:translate-x-0 md:bg-surface/30 md:shadow-none md:backdrop-blur-xl ${
           isOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
         }`}
       >
         {/* Header Bar */}
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#1e2a5e] px-5">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#24336a] bg-[#1a2550] text-primary shadow-xs">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-border dark:bg-[#1a2550] bg-sky-50 text-primary shadow-xs">
               <SlidersHorizontal className="h-4 w-4" />
             </div>
             <div>
@@ -120,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           
           {/* Section 1: Language & Broadcasting Standard */}
-          <div className="relative z-30 rounded-2xl border border-[#1e2a5e] bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-[#2b3c7e]">
+          <div className="relative z-30 rounded-2xl border border-border bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-primary/40">
             <div className="flex items-center justify-between px-1">
               <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-text-muted">
                 <Globe className="h-3.5 w-3.5 text-primary" />
@@ -151,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Section 2: Tone & Context */}
-          <div className="relative z-20 rounded-2xl border border-[#1e2a5e] bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-[#2b3c7e]">
+          <div className="relative z-20 rounded-2xl border border-border bg-surface/40 p-3.5 space-y-3.5 backdrop-blur-md shadow-xs transition-all hover:border-primary/40">
             <div className="flex items-center justify-between px-1">
               <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-text-muted">
                 <Palette className="h-3.5 w-3.5 text-secondary" />
@@ -190,14 +190,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
 
           {/* Section 4: Protected Vocabulary & Glossary */}
-          <div className="rounded-2xl border border-[#1e2a5e] bg-surface/40 p-3.5 space-y-3 backdrop-blur-md shadow-xs transition-all hover:border-[#2b3c7e]">
+          <div className="rounded-2xl border border-border bg-surface/40 p-3.5 space-y-3 backdrop-blur-md shadow-xs transition-all hover:border-primary/40">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-1.5 text-xs font-bold text-text">
                 <Shield className="h-3.5 w-3.5 text-primary" />
                 <span>اصطلاحات محافظت‌شده</span>
               </div>
               {protectedTermsCount > 0 ? (
-                <span className="rounded-md border border-[#24336a] bg-[#1a2550] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
+                <span className="rounded-md border border-border dark:bg-[#1a2550] bg-sky-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
                   {protectedTermsCount} اصطلاح
                 </span>
               ) : (
@@ -210,7 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               value={settings.doNotTranslateTerms}
               onChange={(e) => updateSettings({ doNotTranslateTerms: e.target.value })}
               placeholder="مثال: React, API, SubMaster, Docker"
-              className="min-h-[84px] w-full resize-y rounded-xl border border-[#1e2a5e] bg-[var(--input-bg,#060a20)] p-3 font-mono text-xs leading-5 text-text placeholder:text-text-muted/50 shadow-inner transition-all duration-200 focus:border-[#2b3c7e] focus:outline-none focus:ring-1 focus:ring-[#2b3c7e]"
+              className="min-h-[84px] w-full resize-y rounded-xl border border-border dark:bg-[#060a20] bg-white p-3 font-mono text-xs leading-5 text-text placeholder:text-text-muted/50 shadow-inner transition-all duration-200 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
               dir="auto"
             />
             
@@ -224,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={onOpenGlossary}
               type="button"
-              className="group flex min-h-[46px] w-full items-center justify-between rounded-xl border border-[#24336a] bg-[#141d42] px-3.5 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 hover:border-[#2f428a] hover:bg-[#182350] active:scale-[0.995]"
+              className="group flex min-h-[46px] w-full items-center justify-between rounded-xl border border-border dark:bg-[#141d42] bg-fuchsia-50/50 hover:bg-fuchsia-50 dark:hover:bg-[#182350] px-3.5 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 active:scale-[0.995]"
             >
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary/20 text-secondary">
@@ -247,11 +247,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="shrink-0 border-t border-[#1e2a5e] bg-surface/50 p-4 backdrop-blur-lg space-y-2.5">
+        <div className="shrink-0 border-t border-border bg-surface/50 p-4 backdrop-blur-lg space-y-2.5">
           <button
             onClick={onOpenTextTranslator}
             type="button"
-            className="group flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-[#273875] bg-gradient-to-r from-[#121a3e] to-[#182455] px-4 py-2.5 text-sm font-bold text-text shadow-sm transition-all duration-200 hover:border-[#384e9c] hover:from-[#172354] hover:to-[#1e2e6d] hover:text-white hover:shadow-md active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-[#384e9c]"
+            className="group flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-border dark:bg-gradient-to-r dark:from-[#121a3e] dark:to-[#182455] bg-white px-4 py-2.5 text-sm font-bold text-text shadow-xs transition-all duration-200 hover:border-primary/50 hover:bg-surfaceHighlight active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-primary/40"
           >
             <MessageSquareText className="h-4 w-4 text-primary transition-transform group-hover:scale-110" />
             <span>ترجمه فوری متن و دیالوگ</span>
@@ -260,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onOpenSettings}
             type="button"
-            className="group flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-[#1e2a5e] bg-surface/80 px-4 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 hover:border-[#2b3c7e] hover:bg-surfaceHighlight active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-[#2b3c7e]"
+            className="group flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/80 px-4 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 hover:border-primary/40 hover:bg-surfaceHighlight active:scale-[0.99] focus:outline-none focus:ring-1 focus:ring-primary/40"
           >
             <Settings className="h-4 w-4 text-text-muted transition-transform duration-300 group-hover:rotate-45 group-hover:text-text" />
             <span>تنظیمات پیشرفته سیستم</span>

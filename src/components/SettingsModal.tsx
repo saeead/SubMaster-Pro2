@@ -206,12 +206,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
         <div className="relative w-full max-w-lg glass rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
           <div className="p-6 overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Cpu className="w-6 h-6 text-[#ff00ea]" />
+              <h2 className="text-xl font-bold text-text flex items-center gap-2">
+                <Cpu className="w-6 h-6 text-secondary" />
                 تنظیمات موتور هوش مصنوعی
               </h2>
-              <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                <X className="w-5 h-5 text-white/60" />
+              <button onClick={onClose} className="p-2 hover:bg-surfaceHighlight rounded-full transition-colors">
+                <X className="w-5 h-5 text-text-muted" />
               </button>
             </div>
 
@@ -306,22 +306,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                 )}
 
                 {settings.aiProvider === 'lm_studio' && (
-                  <div className="bg-[#0a0e27]/50 rounded-xl p-4 border border-white/10 space-y-3">
-                    <p className="text-xs text-white/60 leading-relaxed">
+                  <div className="dark:bg-[#0a0e27]/50 bg-slate-50 rounded-xl p-4 border dark:border-white/10 border-slate-200 space-y-3 shadow-xs">
+                    <p className="text-xs text-text-muted leading-relaxed">
                       در LM Studio بخش Local Server را روشن کنید. پیش‌فرض برنامه با آدرس OpenAI-compatible یعنی http://localhost:1234/v1 کار می‌کند.
                     </p>
-                    <label className="block text-xs text-white/50">آدرس سرور LM Studio</label>
+                    <label className="block text-xs text-text-muted">آدرس سرور LM Studio</label>
                     <input
                       value={settings.lmStudioBaseUrl}
                       onChange={(e) => updateSettings({ lmStudioBaseUrl: e.target.value })}
-                      className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#00f0ff] focus:outline-none font-mono"
+                      className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-primary focus:outline-none font-mono shadow-xs"
                       placeholder="http://localhost:1234/v1"
                     />
-                    <label className="block text-xs text-white/50">نام مدل بارگذاری‌شده</label>
+                    <label className="block text-xs text-text-muted">نام مدل بارگذاری‌شده</label>
                     <input
                       value={settings.lmStudioModel}
                       onChange={(e) => updateSettings({ lmStudioModel: e.target.value })}
-                      className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#00f0ff] focus:outline-none font-mono"
+                      className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-primary focus:outline-none font-mono shadow-xs"
                       placeholder="local-model"
                     />
                     <button
@@ -342,16 +342,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               </div>
 
               {settings.aiProvider === 'openai_compatible' && (
-                <div className="bg-[#0a0e27]/50 rounded-xl p-4 border border-white/10 space-y-4">
+                <div className="dark:bg-[#0a0e27]/50 bg-slate-50 rounded-xl p-4 border dark:border-white/10 border-slate-200 space-y-4 shadow-xs">
                   <div className="space-y-2">
-                    <h3 className="text-sm text-green-400 font-bold">سرویس‌های OpenAI Compatible</h3>
-                    <p className="text-xs text-white/60 leading-relaxed">
+                    <h3 className="text-sm text-green-500 font-bold">سرویس‌های OpenAI Compatible</h3>
+                    <p className="text-xs text-text-muted leading-relaxed">
                       هر سرویس باید endpoint سازگار با Chat Completions داشته باشد. می‌توانید Base URL مثل https://example.com/v1 یا URL کامل .../chat/completions را وارد کنید.
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-xs text-white/50">پریست‌های سریع برای روش Subtitle Translator:</p>
+                    <p className="text-xs text-text-muted">پریست‌های سریع برای روش Subtitle Translator:</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {SUBTITLE_TRANSLATOR_SERVICE_PRESETS.map(preset => (
                         <button
@@ -363,10 +363,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                             setServiceModelInput(preset.model);
                             setOpenAIServiceMessage(null);
                           }}
-                          className="rounded-lg border border-green-400/20 bg-green-400/10 px-3 py-2 text-right text-[11px] text-green-100 transition-all hover:bg-green-400/20"
+                          className="rounded-lg border border-green-400/20 bg-green-400/10 px-3 py-2 text-right text-[11px] text-green-600 dark:text-green-100 transition-all hover:bg-green-400/20"
                         >
                           <span className="block font-bold">{preset.name}</span>
-                          <span className="block truncate font-mono text-[10px] text-white/45">{preset.model || 'server default model'}</span>
+                          <span className="block truncate font-mono text-[10px] text-text-muted">{preset.model || 'server default model'}</span>
                         </button>
                       ))}
                     </div>
@@ -376,26 +376,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                     <input
                       value={serviceNameInput}
                       onChange={(e) => { setServiceNameInput(e.target.value); setOpenAIServiceMessage(null); }}
-                      className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-green-400 focus:outline-none"
+                      className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-green-500 focus:outline-none shadow-xs"
                       placeholder="نام سرویس، مثلا OpenRouter یا Local Proxy"
                     />
                     <input
                       value={serviceBaseUrlInput}
                       onChange={(e) => { setServiceBaseUrlInput(e.target.value); setOpenAIServiceMessage(null); }}
-                      className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-green-400 focus:outline-none font-mono"
+                      className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-green-500 focus:outline-none font-mono shadow-xs"
                       placeholder="Base URL یا URL کامل chat/completions"
                     />
                     <input
                       value={serviceApiKeyInput}
                       onChange={(e) => { setServiceApiKeyInput(e.target.value); setOpenAIServiceMessage(null); }}
-                      className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-green-400 focus:outline-none font-mono"
+                      className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-green-500 focus:outline-none font-mono shadow-xs"
                       placeholder="API Key (برای لوکال/دروازه بدون احراز هویت اختیاری است)"
                       type="password"
                     />
                     <input
                       value={serviceModelInput}
                       onChange={(e) => { setServiceModelInput(e.target.value); setOpenAIServiceMessage(null); }}
-                      className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-green-400 focus:outline-none font-mono"
+                      className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-green-500 focus:outline-none font-mono shadow-xs"
                       placeholder="نام مدل، مثلا gpt-4o-mini یا qwen/qwen3-30b"
                     />
                   </div>
@@ -426,15 +426,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
 
                   {settings.openAICompatibleServices.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs text-white/50">سرویس‌های ذخیره‌شده:</p>
+                      <p className="text-xs text-text-muted">سرویس‌های ذخیره‌شده:</p>
                       {settings.openAICompatibleServices.map(service => (
-                        <div key={service.id} className={`p-3 rounded-lg border flex items-center justify-between gap-3 ${activeOpenAIService?.id === service.id ? 'bg-green-400/10 border-green-400/40' : 'bg-[#0a0e27] border-white/10'}`}>
+                        <div key={service.id} className={`p-3 rounded-lg border flex items-center justify-between gap-3 ${activeOpenAIService?.id === service.id ? 'bg-green-400/10 border-green-400/40' : 'dark:bg-[#0a0e27] bg-white dark:border-white/10 border-slate-200 shadow-xs'}`}>
                           <button
                             onClick={() => updateSettings({ activeOpenAICompatibleServiceId: service.id, aiProvider: 'openai_compatible' })}
                             className="flex-1 text-right min-w-0"
                           >
-                            <span className="block text-sm text-white truncate">{service.name}</span>
-                            <span className="block text-[10px] text-white/40 truncate direction-ltr">{service.baseUrl} • {service.model}</span>
+                            <span className="block text-sm text-text font-semibold truncate">{service.name}</span>
+                            <span className="block text-[10px] text-text-muted truncate direction-ltr">{service.baseUrl} • {service.model}</span>
                           </button>
                           <button
                             onClick={() => handleTestOpenAIService(service)}
@@ -489,8 +489,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                     </div>
                 </div>
                 
-                <div className="bg-[#0a0e27]/50 rounded-xl p-4 border border-white/10 space-y-4">
-                  <p className="text-xs text-white/60 leading-relaxed">
+                <div className="dark:bg-[#0a0e27]/50 bg-slate-50 rounded-xl p-4 border dark:border-white/10 border-slate-200 space-y-4 shadow-xs">
+                  <p className="text-xs text-text-muted leading-relaxed">
                     کلیدهای API خود را وارد کنید. می‌توانید چندین کلید را به صورت همزمان وارد کنید.
                   </p>
 
@@ -499,7 +499,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                       value={newKeyInput}
                       onChange={(e) => { setNewKeyInput(e.target.value); setValidationError(null); setSuccessMessage(null); }}
                       placeholder="کلیدهای API را اینجا وارد کنید..."
-                      className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:border-[#00f0ff] focus:outline-none min-h-[100px] resize-y custom-scrollbar font-mono leading-6"
+                      className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-4 py-3 text-sm dark:text-white text-slate-900 focus:border-primary focus:outline-none min-h-[100px] resize-y custom-scrollbar font-mono leading-6 shadow-xs"
                     />
                     <button 
                       onClick={handleAddKeys}
@@ -527,14 +527,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
 
                   <div className="space-y-2 mt-4 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
                     {settings.apiKeys.map((k, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-[#0a0e27] rounded-lg border border-white/10 group hover:border-white/20 transition-all">
+                      <div key={idx} className="flex items-center justify-between p-3 dark:bg-[#0a0e27] bg-white rounded-lg border dark:border-white/10 border-slate-200 group hover:border-primary/40 transition-all shadow-xs">
                         <div className="flex items-center gap-3">
                           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${k.isValid ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`}></div>
                           <div className="flex flex-col min-w-0">
-                             <span className="text-xs text-white font-mono truncate">
+                             <span className="text-xs dark:text-white text-slate-900 font-mono truncate">
                                {k.key.slice(0, 8)}...{k.key.slice(-6)}
                              </span>
-                             <span className="text-[10px] text-white/40 truncate">
+                             <span className="text-[10px] text-text-muted truncate">
                                {k.label} {k.isRateLimited && <span className="text-yellow-500 font-bold ml-1">(Rate Limited)</span>}
                              </span>
                           </div>

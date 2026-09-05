@@ -287,7 +287,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                   value={findTerm}
                   onChange={(e) => setFindTerm(e.target.value)}
                   placeholder="مثلاً: گالکسی"
-                  className="w-full bg-[#0a0e27] border border-white/10 rounded-xl py-3 px-4 pl-10 text-sm text-white focus:border-[#00f0ff] focus:outline-none transition-colors"
+                  className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-xl py-3 px-4 pl-10 text-sm dark:text-white text-slate-900 focus:border-[#00f0ff] focus:outline-none transition-colors shadow-xs placeholder:text-text-muted/60"
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
              </div>
@@ -303,7 +303,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                 value={replaceTerm}
                 onChange={(e) => setReplaceTerm(e.target.value)}
                 placeholder="مثلاً: کهکشان"
-                className="w-full bg-[#0a0e27] border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:border-[#00f0ff] focus:outline-none transition-colors"
+                className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-xl py-3 px-4 text-sm dark:text-white text-slate-900 focus:border-[#00f0ff] focus:outline-none transition-colors shadow-xs placeholder:text-text-muted/60"
              />
           </div>
 
@@ -347,7 +347,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               <button
                 type="button"
                 onClick={(event) => toggleBlockSelection(block.id, event.shiftKey)}
-                className={`absolute right-5 top-6 z-20 rounded-lg p-1.5 transition-all ${selectedSet.has(block.id) ? 'bg-[#ff00ea]/20 text-[#ff00ea]' : 'bg-[#0a0e27]/80 text-white/40 hover:text-[#ff00ea] hover:bg-[#ff00ea]/10'}`}
+                className={`absolute right-5 top-6 z-20 rounded-lg p-1.5 transition-all ${selectedSet.has(block.id) ? 'bg-[#ff00ea]/20 text-[#ff00ea]' : 'dark:bg-[#0a0e27]/80 bg-slate-100 dark:text-white/40 text-slate-500 hover:text-[#ff00ea] hover:bg-[#ff00ea]/10 border dark:border-white/10 border-slate-200'}`}
                 aria-pressed={selectedSet.has(block.id)}
                 aria-label={`انتخاب بلوک ${block.index}`}
                 title="انتخاب برای ترجمه دوباره؛ با Shift بازه بین دو بلوک انتخاب می‌شود"
@@ -373,7 +373,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               <div className="flex justify-between items-center mb-4 text-xs font-mono">
                 <div className="flex items-center gap-3">
                     <span className={`${hasError ? 'text-[#E50914]' : 'text-[#00f0ff]'} font-bold`}>#{block.index}</span>
-                    <div className="flex items-center gap-2 bg-[#0a0e27] px-3 py-1.5 rounded-lg border border-white/10 text-white/50">
+                    <div className="flex items-center gap-2 dark:bg-[#0a0e27] bg-slate-100 px-3 py-1.5 rounded-lg border dark:border-white/10 border-slate-200 dark:text-white/50 text-slate-600">
                         <Clock className="w-3 h-3" />
                         <span>{block.startTime}</span>
                         <span className="text-white/20">➜</span>
@@ -385,10 +385,10 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="ltr">
                 {/* Original Text */}
                 <div className="relative group/input">
-                    <label className="absolute -top-3 left-3 px-2 bg-[#0a0e27] text-[10px] text-white/40 uppercase tracking-wider rounded border border-white/10">Original</label>
+                    <label className="absolute -top-3 left-3 px-2 dark:bg-[#0a0e27] bg-white text-[10px] dark:text-white/60 text-slate-600 uppercase tracking-wider rounded border dark:border-white/10 border-slate-200 font-semibold shadow-xs">Original</label>
                     <div 
                         dir="auto"
-                        className="w-full p-4 bg-[#0a0e27]/50 rounded-xl text-white/80 text-sm leading-7 border border-white/5 min-h-[100px]"
+                        className="w-full p-4 dark:bg-[#0a0e27]/50 bg-slate-50/80 rounded-xl dark:text-white/80 text-slate-800 text-sm leading-7 border dark:border-white/5 border-slate-200 min-h-[100px] shadow-xs"
                     >
                         {block.originalText}
                     </div>
@@ -396,7 +396,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     
                 {/* Translated Text */}
                 <div className="relative group/input">
-                    <label className={`absolute -top-3 right-3 px-2 bg-[#0a0e27] text-[10px] uppercase tracking-wider rounded border ${hasError ? 'text-[#E50914] border-[#E50914]/50' : 'text-[#00f0ff] border-[#00f0ff]/20'}`}>Persian</label>
+                    <label className={`absolute -top-3 right-3 px-2 dark:bg-[#0a0e27] bg-white text-[10px] uppercase tracking-wider rounded border font-semibold shadow-xs ${hasError ? 'text-[#E50914] border-[#E50914]/50' : 'text-primary dark:border-[#00f0ff]/20 border-sky-400/40'}`}>Persian</label>
                     <textarea
                         value={block.translatedText || ''}
                         onChange={(e) => onUpdateBlock(block.id, e.target.value)}
@@ -415,10 +415,10 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                         placeholder="در انتظار ترجمه..."
                         dir="auto"
                         className={`
-                            w-full p-4 bg-[#0a0e27] rounded-xl text-sm leading-7 resize-y min-h-[100px] focus:outline-none border transition-all
+                            w-full p-4 dark:bg-[#0a0e27] bg-white rounded-xl text-sm leading-7 resize-y min-h-[100px] focus:outline-none border transition-all shadow-xs
                             ${block.translatedText 
-                                ? 'text-white border-white/10 focus:border-[#00f0ff]/50' 
-                                : 'text-white/30 border-white/5 focus:border-white/20 italic'
+                                ? 'dark:text-white text-slate-900 dark:border-white/10 border-slate-200 focus:border-[#00f0ff]/60 focus:ring-1 focus:ring-sky-400/30' 
+                                : 'dark:text-white/30 text-slate-400 dark:border-white/5 border-slate-200 focus:border-slate-300 italic'
                             }
                         `}
                     />

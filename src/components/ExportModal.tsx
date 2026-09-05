@@ -249,10 +249,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onCon
                                         <select 
                                             value={styles.fontFamily}
                                             onChange={(e) => { setStyles({...styles, fontFamily: e.target.value}); setActiveTemplate('custom'); }}
-                                            className="w-full bg-[#0a0e27] border border-border rounded-lg p-2 text-white text-sm focus:border-secondary outline-none appearance-none"
+                                            className="w-full bg-surface border border-border rounded-lg p-2 text-text text-sm focus:border-secondary outline-none appearance-none"
                                         >
                                             {FONT_OPTIONS.map(opt => (
-                                                <option key={opt.value} value={opt.value} className="bg-[#0a0e27] text-white py-2">
+                                                <option key={opt.value} value={opt.value} className="bg-surface text-text py-2">
                                                     {opt.label}
                                                 </option>
                                             ))}

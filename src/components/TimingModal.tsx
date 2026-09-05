@@ -47,26 +47,26 @@ export const TimingModal: React.FC<TimingModalProps> = ({ isOpen, onClose, onApp
       <div className="relative w-full max-w-md glass rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Clock className="w-6 h-6 text-[#00f0ff]" />
+            <h2 className="text-xl font-bold text-text flex items-center gap-2">
+              <Clock className="w-6 h-6 text-primary" />
               ابزارهای زمان‌بندی
             </h2>
-            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-              <X className="w-5 h-5 text-white/60" />
+            <button onClick={onClose} className="p-2 hover:bg-surfaceHighlight rounded-full transition-colors">
+              <X className="w-5 h-5 text-text-muted" />
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex p-1 bg-[#0a0e27] rounded-xl border border-white/10 mb-6">
+          <div className="flex p-1 dark:bg-[#0a0e27] bg-slate-100 rounded-xl border dark:border-white/10 border-slate-200 mb-6">
              <button 
                 onClick={() => setActiveTab('adjust')}
-                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'adjust' ? 'bg-white/10 text-white shadow' : 'text-white/40 hover:text-white'}`}
+                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'adjust' ? 'dark:bg-white/10 bg-white text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
              >
                 تنظیم زمان (Adjust)
              </button>
              <button 
                 onClick={() => setActiveTab('netflix')}
-                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'netflix' ? 'bg-[#E50914]/20 text-[#E50914] shadow' : 'text-white/40 hover:text-white'}`}
+                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'netflix' ? 'bg-[#E50914]/20 text-[#E50914] shadow-sm' : 'text-text-muted hover:text-text'}`}
              >
                 استاندارد Netflix
              </button>
@@ -76,44 +76,44 @@ export const TimingModal: React.FC<TimingModalProps> = ({ isOpen, onClose, onApp
             <div className="space-y-6">
                {/* Mode Select */}
                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => setMode('seconds')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 ${mode === 'seconds' ? 'bg-[#00f0ff]/10 border-[#00f0ff] text-[#00f0ff]' : 'bg-white/5 border-white/10 text-white/60'}`}>
+                  <button onClick={() => setMode('seconds')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 transition-all ${mode === 'seconds' ? 'bg-primary/15 border-primary text-primary font-bold shadow-xs' : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 text-text-muted hover:text-text'}`}>
                       <MoveRight className="w-5 h-5" /> Seconds
                   </button>
-                  <button onClick={() => setMode('percent')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 ${mode === 'percent' ? 'bg-[#00f0ff]/10 border-[#00f0ff] text-[#00f0ff]' : 'bg-white/5 border-white/10 text-white/60'}`}>
+                  <button onClick={() => setMode('percent')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 transition-all ${mode === 'percent' ? 'bg-primary/15 border-primary text-primary font-bold shadow-xs' : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 text-text-muted hover:text-text'}`}>
                       <Percent className="w-5 h-5" /> Percent
                   </button>
-                  <button onClick={() => setMode('recalculate')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 ${mode === 'recalculate' ? 'bg-[#00f0ff]/10 border-[#00f0ff] text-[#00f0ff]' : 'bg-white/5 border-white/10 text-white/60'}`}>
+                  <button onClick={() => setMode('recalculate')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 transition-all ${mode === 'recalculate' ? 'bg-primary/15 border-primary text-primary font-bold shadow-xs' : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 text-text-muted hover:text-text'}`}>
                       <Calculator className="w-5 h-5" /> Recalculate
                   </button>
-                  <button onClick={() => setMode('fixed')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 ${mode === 'fixed' ? 'bg-[#00f0ff]/10 border-[#00f0ff] text-[#00f0ff]' : 'bg-white/5 border-white/10 text-white/60'}`}>
+                  <button onClick={() => setMode('fixed')} className={`p-3 rounded-xl border text-sm flex flex-col items-center gap-2 transition-all ${mode === 'fixed' ? 'bg-primary/15 border-primary text-primary font-bold shadow-xs' : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 text-text-muted hover:text-text'}`}>
                       <Sliders className="w-5 h-5" /> Fixed
                   </button>
                </div>
 
-               <div className="bg-[#0a0e27]/50 p-4 rounded-xl border border-white/10">
+               <div className="dark:bg-[#0a0e27]/50 bg-slate-50 p-4 rounded-xl border dark:border-white/10 border-slate-200 shadow-xs">
                   
                   {/* Seconds Controls */}
                   {mode === 'seconds' && (
                       <div className="space-y-4">
-                          <label className="text-xs text-white/50 block">نوع تغییر</label>
+                          <label className="text-xs text-text-muted block">نوع تغییر</label>
                           <select 
-                             value={targetSide} 
-                             onChange={(e) => setTargetSide(e.target.value as any)}
-                             className="w-full bg-[#0a0e27] border border-white/10 rounded-lg p-2 text-white text-sm focus:border-[#00f0ff] outline-none"
+                              value={targetSide} 
+                              onChange={(e) => setTargetSide(e.target.value as any)}
+                              className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg p-2 dark:text-white text-slate-900 text-sm focus:border-primary outline-none shadow-xs"
                           >
-                              <option value="shift">Shift All (جابجایی کلی)</option>
-                              <option value="end">Extend End (افزایش پایان)</option>
-                              <option value="start">Extend Start (افزایش شروع)</option>
-                              <option value="both">Extend Both (از دو طرف)</option>
+                              <option value="shift" className="dark:bg-[#0a0e27] bg-white dark:text-white text-slate-900">Shift All (جابجایی کلی)</option>
+                              <option value="end" className="dark:bg-[#0a0e27] bg-white dark:text-white text-slate-900">Extend End (افزایش پایان)</option>
+                              <option value="start" className="dark:bg-[#0a0e27] bg-white dark:text-white text-slate-900">Extend Start (افزایش شروع)</option>
+                              <option value="both" className="dark:bg-[#0a0e27] bg-white dark:text-white text-slate-900">Extend Both (از دو طرف)</option>
                           </select>
 
-                          <label className="text-xs text-white/50 block">مقدار (ثانیه) - منفی برای کاهش</label>
+                          <label className="text-xs text-text-muted block">مقدار (ثانیه) - منفی برای کاهش</label>
                           <input 
                               type="number" 
                               step="0.1"
                               value={secondsVal}
                               onChange={(e) => setSecondsVal(parseFloat(e.target.value))}
-                              className="w-full bg-[#0a0e27] border border-white/10 rounded-lg p-2 text-white text-sm focus:border-[#00f0ff] outline-none dir-ltr"
+                              className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg p-2 dark:text-white text-slate-900 text-sm focus:border-primary outline-none dir-ltr shadow-xs"
                           />
                       </div>
                   )}
@@ -121,44 +121,44 @@ export const TimingModal: React.FC<TimingModalProps> = ({ isOpen, onClose, onApp
                   {/* Percent Controls */}
                   {mode === 'percent' && (
                       <div className="space-y-4">
-                          <label className="text-xs text-white/50 block">درصد تغییر (100 = بدون تغییر)</label>
+                          <label className="text-xs text-text-muted block">درصد تغییر (100 = بدون تغییر)</label>
                           <div className="flex items-center gap-2">
                             <input 
                                 type="number" 
                                 value={percentVal}
                                 onChange={(e) => setPercentVal(parseFloat(e.target.value))}
-                                className="flex-1 bg-[#0a0e27] border border-white/10 rounded-lg p-2 text-white text-sm focus:border-[#00f0ff] outline-none dir-ltr"
+                                className="flex-1 dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg p-2 dark:text-white text-slate-900 text-sm focus:border-primary outline-none dir-ltr shadow-xs"
                             />
-                            <span className="text-white">%</span>
+                            <span className="text-text font-bold">%</span>
                           </div>
-                          <p className="text-[10px] text-white/40">مثال: 120 درصد طول نمایش را 20% افزایش می‌دهد.</p>
+                          <p className="text-[10px] text-text-muted">مثال: 120 درصد طول نمایش را 20% افزایش می‌دهد.</p>
                       </div>
                   )}
 
                   {/* Recalculate Controls */}
                   {mode === 'recalculate' && (
                       <div className="space-y-4">
-                          <label className="text-xs text-white/50 block">سرعت خواندن (کاراکتر در ثانیه)</label>
+                          <label className="text-xs text-text-muted block">سرعت خواندن (کاراکتر در ثانیه)</label>
                           <input 
                               type="number" 
                               value={recalcCps}
                               onChange={(e) => setRecalcCps(parseFloat(e.target.value))}
-                              className="w-full bg-[#0a0e27] border border-white/10 rounded-lg p-2 text-white text-sm focus:border-[#00f0ff] outline-none dir-ltr"
+                              className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg p-2 dark:text-white text-slate-900 text-sm focus:border-primary outline-none dir-ltr shadow-xs"
                           />
-                          <p className="text-[10px] text-white/40">استاندارد نتفلیکس: حداکثر 20 کاراکتر بر ثانیه.</p>
+                          <p className="text-[10px] text-text-muted">استاندارد نتفلیکس: حداکثر 20 کاراکتر بر ثانیه.</p>
                       </div>
                   )}
 
                   {/* Fixed Controls */}
                   {mode === 'fixed' && (
                       <div className="space-y-4">
-                          <label className="text-xs text-white/50 block">مدت زمان ثابت (ثانیه)</label>
+                          <label className="text-xs text-text-muted block">مدت زمان ثابت (ثانیه)</label>
                           <input 
                               type="number" 
                               step="0.1"
                               value={fixedVal}
                               onChange={(e) => setFixedVal(parseFloat(e.target.value))}
-                              className="w-full bg-[#0a0e27] border border-white/10 rounded-lg p-2 text-white text-sm focus:border-[#00f0ff] outline-none dir-ltr"
+                              className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg p-2 dark:text-white text-slate-900 text-sm focus:border-primary outline-none dir-ltr shadow-xs"
                           />
                       </div>
                   )}

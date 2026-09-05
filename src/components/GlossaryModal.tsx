@@ -107,7 +107,7 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ isOpen, onClose, g
              </button>
         </div>
 
-        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 bg-[#0a0e27]/30">
+        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 dark:bg-[#0a0e27]/30 bg-slate-50/50">
             
             {activeTab === 'list' && (
                 <div className="space-y-4">
@@ -119,7 +119,7 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ isOpen, onClose, g
                                 onChange={(e) => setNewTerm(e.target.value)}
                                 placeholder="واژه اصلی (انگلیسی)"
                                 dir="auto"
-                                className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#ff00ea] focus:outline-none"
+                                className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-secondary focus:outline-none shadow-xs"
                             />
                         </div>
                         <div className="flex-1 space-y-1">
@@ -128,13 +128,13 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ isOpen, onClose, g
                                 onChange={(e) => setNewTranslation(e.target.value)}
                                 placeholder="ترجمه دلخواه"
                                 dir="auto"
-                                className="w-full bg-[#0a0e27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#ff00ea] focus:outline-none"
+                                className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-lg px-3 py-2 text-sm dark:text-white text-slate-900 focus:border-secondary focus:outline-none shadow-xs"
                             />
                         </div>
                         <button 
                             onClick={handleAdd}
                             disabled={!newTerm || !newTranslation}
-                            className="bg-[#ff00ea]/20 hover:bg-[#ff00ea]/40 text-[#ff00ea] rounded-lg px-3 flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="bg-secondary/20 hover:bg-secondary/30 text-secondary rounded-lg px-3 flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                             <Plus className="w-5 h-5" />
                         </button>
@@ -143,20 +143,20 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ isOpen, onClose, g
                     {/* List */}
                     <div className="space-y-2 mt-4">
                         {items.length === 0 ? (
-                            <div className="text-center py-8 text-white/30 text-sm border-2 border-dashed border-white/5 rounded-xl">
+                            <div className="text-center py-8 text-text-muted text-sm border-2 border-dashed border-border rounded-xl">
                                 هنوز واژه‌ای اضافه نشده است.
                             </div>
                         ) : (
                             items.map((item, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-3 bg-[#0a0e27] rounded-lg border border-white/10 group hover:border-white/20 transition-all">
+                                <div key={idx} className="flex items-center justify-between p-3 dark:bg-[#0a0e27] bg-white rounded-lg border dark:border-white/10 border-slate-200 group hover:border-border transition-all shadow-xs">
                                     <div className="flex items-center gap-3 w-full">
-                                        <span className="text-white/90 text-sm font-medium w-1/2 dir-ltr truncate" title={item.term}>{item.term}</span>
-                                        <span className="text-white/30">➜</span>
-                                        <span className="text-[#ff00ea] text-sm font-medium w-1/2 dir-rtl truncate text-right" title={item.translation}>{item.translation}</span>
+                                        <span className="dark:text-white/90 text-slate-800 text-sm font-medium w-1/2 dir-ltr truncate" title={item.term}>{item.term}</span>
+                                        <span className="text-text-muted/50">➜</span>
+                                        <span className="text-secondary text-sm font-semibold w-1/2 dir-rtl truncate text-right" title={item.translation}>{item.translation}</span>
                                     </div>
                                     <button 
                                         onClick={() => handleRemove(item.term)}
-                                        className="text-white/20 hover:text-red-400 transition-colors p-2"
+                                        className="text-text-muted hover:text-red-500 transition-colors p-2"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -169,16 +169,16 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ isOpen, onClose, g
 
             {activeTab === 'bulk' && (
                 <div className="space-y-4 h-full flex flex-col">
-                    <div className="bg-[#ff00ea]/5 border border-[#ff00ea]/20 rounded-lg p-3 text-xs text-white/70">
-                        <p className="font-bold mb-1 text-[#ff00ea]">راهنما:</p>
+                    <div className="bg-secondary/10 border border-secondary/20 rounded-lg p-3 text-xs text-text">
+                        <p className="font-bold mb-1 text-secondary">راهنما:</p>
                         هر خط باید شامل یک واژه و ترجمه آن باشد که با <b>:</b> یا <b>-&gt;</b> جدا شده‌اند.
                         <br/>
-                        مثال: <code className="bg-black/30 px-1 rounded text-[#ff00ea]">Jon Snow: جان اسنو</code>
+                        مثال: <code className="dark:bg-black/30 bg-slate-200/70 px-1 rounded text-secondary font-mono">Jon Snow: جان اسنو</code>
                     </div>
                     <textarea 
                         value={bulkInput}
                         onChange={(e) => setBulkInput(e.target.value)}
-                        className="flex-1 w-full bg-[#0a0e27] border border-white/10 rounded-xl p-4 text-sm text-white focus:border-[#ff00ea] focus:outline-none resize-none font-mono min-h-[200px]"
+                        className="flex-1 w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-xl p-4 text-sm dark:text-white text-slate-900 focus:border-secondary focus:outline-none resize-none font-mono min-h-[200px] shadow-xs"
                         placeholder={`Jon Snow: جان اسنو\nHigh Garden: های‌گاردن\n...`}
                     />
                     <button 

@@ -57,8 +57,8 @@ export const SettingsCombobox = <T extends string>({
           aria-expanded={open}
           aria-controls={listId}
           onClick={() => setOpen(current => !current)}
-          className={`group flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-right text-sm text-text shadow-xs backdrop-blur-md transition-all duration-200 hover:border-[#2e4085] hover:bg-surface/90 focus:outline-none focus:ring-1 focus:ring-[#2e4085] active:scale-[0.995] ${
-            open ? 'border-[#334794] bg-surface ring-1 ring-primary/40' : 'border-[#1e2a5e] bg-surface/60'
+          className={`group flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-right text-sm text-text shadow-xs backdrop-blur-md transition-all duration-200 hover:border-primary/40 hover:bg-surface/90 focus:outline-none focus:ring-1 focus:ring-primary/40 active:scale-[0.995] ${
+            open ? 'border-primary/60 bg-surface ring-1 ring-primary/40' : 'border-border bg-surface/60'
           }`}
         >
           <div className="min-w-0 flex-1">
@@ -84,8 +84,7 @@ export const SettingsCombobox = <T extends string>({
             id={listId}
             role="listbox"
             aria-label={label}
-            className="absolute right-0 left-0 top-full z-[100] mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-[#24336a] bg-[var(--bg-elevated,#111936)] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-all animate-in fade-in zoom-in-95 duration-150"
-            style={{ backgroundColor: 'var(--bg-elevated, #111936)' }}
+            className="absolute right-0 left-0 top-full z-[100] mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-border bg-[var(--bg-elevated)] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-2xl transition-all animate-in fade-in zoom-in-95 duration-150"
           >
             {options.map(option => {
               const isSelected = option.value === value;
@@ -99,8 +98,8 @@ export const SettingsCombobox = <T extends string>({
                     }}
                     className={`group/opt flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2.5 text-right text-sm transition-all duration-150 ${
                       isSelected
-                        ? 'border border-[#2a3b7d] bg-[#1e2a5e]/70 font-semibold text-text shadow-xs'
-                        : 'border border-transparent text-text-muted hover:border-[#1e2a5e] hover:bg-surfaceHighlight hover:text-text'
+                        ? 'border border-primary/30 dark:bg-primary/20 bg-primary/10 font-semibold text-text shadow-xs'
+                        : 'border border-transparent text-text-muted hover:border-border hover:bg-surfaceHighlight hover:text-text'
                     }`}
                   >
                     <div className="min-w-0 flex-1">

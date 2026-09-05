@@ -1,8 +1,66 @@
 
 import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic } from "../types";
-import { APP_CONFIG, getSystemInstruction, LANGUAGE_PROMPTS } from "../constants";
+import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic, GlossaryItem } from "../types";
+import { APP_CONFIG, getSystemInstruction, getCoreSystemInstruction, getDynamicSystemInstruction, LANGUAGE_PROMPTS, GEMINI_CONTEXT_PRE_WINDOW, GEMINI_CONTEXT_POST_WINDOW, getGeminiTemperature } from "../constants";
 import { SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION } from "./methods/skeleton_str";
+import { filterBatchWithMemory, addBatchToMemory } from "./translationMemory";
+import { getStandardLimits, checkCueStandardCompliance, SubtitleComplianceIssue } from "./subtitleUtils";
+
+interface GeminiCacheEntry {
+  cacheName: string;
+  expiresAt: number;
+}
+
+const geminiContextCacheMap = new Map<string, GeminiCacheEntry>();
+const geminiCacheUnsupportedKeys = new Set<string>();
+
+/**
+ * Attempts to retrieve or establish a Gemini Context Cache for the invariant core system instruction.
+ * If the current key/model/tier does not support caching, returns null without throwing,
+ * allowing instant and graceful fallback to the compact system instruction.
+ */
+const getOrEstablishGeminiCache = async (
+  ai: GoogleGenAI,
+  modelName: string,
+  apiKey: string,
+  coreInstruction: string,
+  signal?: AbortSignal
+): Promise<string | null> => {
+  const cacheKey = `${modelName}_${apiKey.slice(-6)}_${coreInstruction.length}`;
+
+  if (geminiCacheUnsupportedKeys.has(cacheKey)) {
+    return null;
+  }
+
+  const existing = geminiContextCacheMap.get(cacheKey);
+  if (existing && existing.expiresAt > Date.now() + 60000) {
+    return existing.cacheName;
+  }
+
+  try {
+    signal?.throwIfAborted();
+    const cacheResult = await ai.caches.create({
+      model: modelName,
+      config: {
+        displayName: 'submaster_core_cache',
+        systemInstruction: coreInstruction,
+        ttl: '3600s',
+      },
+    });
+
+    if (cacheResult && cacheResult.name) {
+      geminiContextCacheMap.set(cacheKey, {
+        cacheName: cacheResult.name,
+        expiresAt: Date.now() + 3500 * 1000,
+      });
+      return cacheResult.name;
+    }
+    return null;
+  } catch {
+    geminiCacheUnsupportedKeys.add(cacheKey);
+    return null;
+  }
+};
 
 const responseSchema: Schema = {
   type: Type.ARRAY,
@@ -12,7 +70,8 @@ const responseSchema: Schema = {
       id: { type: Type.INTEGER, description: "The exact ID from the input block" },
       translatedText: { type: Type.STRING, description: "The translation text in the configured target language" }
     },
-    required: ["id", "translatedText"]
+    required: ["id", "translatedText"],
+    propertyOrdering: ["id", "translatedText"]
   }
 };
 
@@ -207,6 +266,118 @@ const validateBatchResponse = (targetIds: number[], response: unknown): BatchRes
 
 const countReadableChars = (text: string): number => text.replace(/[\r\n]+/g, '').length;
 
+export interface SelectiveValidationResult {
+  validResponses: BatchResponse[];
+  problematicIds: number[];
+  reasons: string[];
+}
+
+/**
+ * Evaluates model output per-cue rather than all-or-nothing.
+ * Identifies successfully translated cues vs problematic cues (missing, duplicate,
+ * repeated translation, excessive length, markdown, empty).
+ * Powers selective retry for Gemini to slash token consumption.
+ */
+const validateSelectiveBatchResponse = (
+  targetBatch: BatchRequest[],
+  response: unknown
+): SelectiveValidationResult => {
+  const targetIds = targetBatch.map(b => b.id);
+  const expectedIds = new Set(targetIds);
+  const seenIds = new Set<number>();
+  const duplicateIds = new Set<number>();
+  const validMap = new Map<number, string>();
+  const reasons: string[] = [];
+
+  if (!Array.isArray(response)) {
+    return {
+      validResponses: [],
+      problematicIds: targetIds,
+      reasons: ['Expected a JSON array from model']
+    };
+  }
+
+  for (let index = 0; index < response.length; index++) {
+    const item = response[index];
+    if (!item || typeof item !== 'object') {
+      reasons.push(`item ${index + 1} is not an object`);
+      continue;
+    }
+
+    const id = Number((item as Partial<BatchResponse>).id);
+    const translatedText = (item as Partial<BatchResponse>).translatedText;
+
+    if (!Number.isInteger(id) || !expectedIds.has(id)) {
+      continue;
+    }
+
+    if (seenIds.has(id)) {
+      duplicateIds.add(id);
+      reasons.push(`duplicate id ${id}`);
+      continue;
+    }
+    seenIds.add(id);
+
+    if (typeof translatedText !== 'string' || translatedText.trim() === '') {
+      reasons.push(`id ${id} has empty translatedText`);
+      continue;
+    }
+
+    const cleanText = translatedText.trim();
+    if (RAW_MARKER_PATTERN.test(cleanText)) {
+      reasons.push(`id ${id} contains raw subtitle marker`);
+      continue;
+    }
+
+    if (MARKDOWN_OR_EXPLANATION_PATTERN.test(cleanText)) {
+      reasons.push(`id ${id} contains markdown or explanatory text`);
+      continue;
+    }
+
+    if (countReadableChars(cleanText) > 500) {
+      reasons.push(`id ${id} is too long (>500 chars)`);
+      continue;
+    }
+
+    validMap.set(id, cleanText);
+  }
+
+  // Invalidate any IDs that appeared multiple times
+  for (const dupId of duplicateIds) {
+    validMap.delete(dupId);
+  }
+
+  // Check for adjacent repeated translations (> 12 chars)
+  for (let i = 1; i < targetBatch.length; i++) {
+    const prevId = targetBatch[i - 1].id;
+    const currId = targetBatch[i].id;
+    const prevText = validMap.get(prevId)?.replace(/\s+/g, ' ').trim();
+    const currText = validMap.get(currId)?.replace(/\s+/g, ' ').trim();
+
+    if (prevText && currText && prevText === currText && prevText.length > 12) {
+      validMap.delete(currId);
+      reasons.push(`ids ${prevId} and ${currId} contain repeated translations`);
+    }
+  }
+
+  const validResponses: BatchResponse[] = [];
+  const problematicIds: number[] = [];
+
+  for (const block of targetBatch) {
+    if (validMap.has(block.id)) {
+      validResponses.push({ id: block.id, translatedText: validMap.get(block.id)! });
+    } else {
+      problematicIds.push(block.id);
+    }
+  }
+
+  return {
+    validResponses,
+    problematicIds,
+    reasons
+  };
+};
+
 const toSelectedRetranslationItems = (blocks: BatchRequest[]): string => (
   blocks.map(block => `⟦id=${block.id}⟧
 Original: ${block.text.replace(/\s+/g, ' ').trim()}
@@ -237,6 +408,81 @@ Retranslation goals:
 - Keep the result concise and subtitle-friendly: max 2 lines, no markdown, no explanations, no raw markers.
 
 Return ONLY a valid JSON array: [{"id": number, "translatedText": "..."}].`;
+
+/**
+ * Lightweight refinement pass for Gemini:
+ * Selectively refines only the suspicious cues that violate subtitle standard constraints
+ * (line length exceeding CPL limit or reading speed exceeding CPS limit).
+ * Sends a minimal-token payload without re-transmitting preceding/following contexts.
+ */
+const refineProblematicCuesForStandards = async (
+  ai: GoogleGenAI,
+  modelName: string,
+  problematicCues: SubtitleComplianceIssue[],
+  settings: AppSettings,
+  signal?: AbortSignal
+): Promise<Map<number, string>> => {
+  const result = new Map<number, string>();
+  if (problematicCues.length === 0) return result;
+
+  const { cplLimit, cpsLimit } = getStandardLimits(settings.outputStandard);
+  const standardName = (settings.outputStandard || 'netflix').toUpperCase();
+  const langName = settings.targetLanguage === 'fa' ? 'Persian' : settings.targetLanguage;
+
+  const refineSystemInstruction = `You are an expert subtitling editor specializing in ${standardName} broadcasting standards.
+Your goal: Rephrase the provided ${langName} subtitle translation(s) to be concise, natural, and properly formatted without dropping any meaning, character names, numbers, or nuances.
+MANDATORY RULES:
+1. Conform to ${standardName} limits: max ${cplLimit} characters per line, max 2 lines. Reading speed under ${cpsLimit} characters/second.
+2. DO NOT summarize, omit, or delete any dialogue facts or meaning. Retain the full sentence sense and tone.
+3. Use natural, conversational ${langName} phrasing.
+4. Output strictly a JSON array of objects: [{"id": <number>, "translatedText": "<concise translated text>"}] with NO markdown, commentary, or raw markers.`;
+
+  const refineUserPrompt = `Refine the following ${problematicCues.length} cue(s) for ${standardName} standards (max ${cplLimit} chars/line, 2 lines max):\n\n` +
+    problematicCues.map(c => `[ID ${c.id}]
+Original: "${c.sourceText.replace(/\s+/g, ' ').trim()}"
+Current Translation: "${c.currentText.replace(/\s+/g, ' ').trim()}"
+Detected Issues: ${c.issues.join('; ')}`).join('\n\n');
+
+  signal?.throwIfAborted();
+  const refineResponse = await ai.models.generateContent({
+    model: modelName,
+    contents: refineUserPrompt,
+    config: {
+      systemInstruction: refineSystemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: responseSchema,
+      temperature: 0.1,
+      safetySettings: SAFETY_SETTINGS,
+    },
+  });
+
+  signal?.throwIfAborted();
+  if (!refineResponse.text) return result;
+
+  try {
+    const parsed = JSON.parse(extractJsonArray(refineResponse.text));
+    if (Array.isArray(parsed)) {
+      const allowedIds = new Set(problematicCues.map(c => c.id));
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const id = Number(item.id);
+        const text = typeof item.translatedText === 'string' ? item.translatedText.trim() : '';
+        if (allowedIds.has(id) && text.length > 0 && !RAW_MARKER_PATTERN.test(text) && !MARKDOWN_OR_EXPLANATION_PATTERN.test(text)) {
+          const originalIssue = problematicCues.find(c => c.id === id);
+          if (originalIssue) {
+            result.set(id, text);
+          }
+        }
+      }
+    }
+  } catch (parseErr) {
+    console.warn('[Gemini Standards Refine] JSON parsing failed in light pass:', parseErr);
+  }
+
+  return result;
+};
+
+
 
 
 const getActiveOpenAICompatibleService = (settings: AppSettings): OpenAICompatibleService => {
@@ -346,12 +592,90 @@ const toMarkedSubtitleParagraph = (blocks: BatchRequest[]): string => (
   blocks.map(block => `⟦${block.id}⟧ ${block.text.replace(/\s+/g, ' ').trim()}`).join('\n')
 );
 
+const formatCleanContextPre = (block: BatchRequest): string => {
+  const match = block.text.match(/^([\s\S]*?)\s*\((?:existing\s+[\w-]+\s+translation|Persian|[\w-]+):\s*([\s\S]*?)\)$/i);
+  if (match) {
+    const orig = match[1].replace(/\s+/g, ' ').trim();
+    const trans = match[2].trim();
+    if (trans && trans.toUpperCase() !== 'N/A') {
+      return `⟦${block.id}⟧ ${orig} ➔ ${trans}`;
+    }
+    return `⟦${block.id}⟧ ${orig}`;
+  }
+  return `⟦${block.id}⟧ ${block.text.replace(/\s+/g, ' ').trim()}`;
+};
+
 export const buildContextualTranslationPrompt = (
   targetBatch: BatchRequest[],
   contextPre: BatchRequest[],
   contextPost: BatchRequest[],
-  useParagraphMode: boolean
+  useParagraphMode: boolean,
+  isGemini: boolean = false,
+  glossary: GlossaryItem[] = [],
+  doNotTranslateTerms: string = ''
 ): string => {
+  if (isGemini) {
+    const pre = contextPre.slice(-GEMINI_CONTEXT_PRE_WINDOW);
+    const post = contextPost.slice(0, GEMINI_CONTEXT_POST_WINDOW);
+    const targetLines = targetBatch
+      .map(block => `⟦${block.id}⟧ ${block.text.replace(/\s+/g, ' ').trim()}`)
+      .join('\n');
+
+    let prompt = '';
+
+    // 1. Few-shot inline examples for Glossary (reinforces adherence in Gemini user prompt)
+    const validGlossary = (glossary || []).filter(g => g && g.term && g.translation);
+    if (validGlossary.length > 0) {
+      const relevantGlossary = validGlossary.filter(item => {
+        const lowerTerm = item.term.toLowerCase();
+        return targetBatch.some(b => b.text.toLowerCase().includes(lowerTerm));
+      });
+
+      const examples = relevantGlossary.length > 0 ? relevantGlossary.slice(0, 4) : validGlossary.slice(0, 3);
+      if (examples.length > 0) {
+        prompt += `GLOSSARY APPLICATION EXAMPLES (few-shot mapping - strictly replace):\n`;
+        for (const item of examples) {
+          prompt += `  • Example: "... ${item.term} ..." ➔ "... ${item.translation} ..."\n`;
+        }
+        prompt += `\n`;
+      }
+    }
+
+    // 2. Strong protection for doNotTranslateTerms in user prompt
+    const protectedTerms = (doNotTranslateTerms || '')
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+
+    if (protectedTerms.length > 0) {
+      const relevantProtected = protectedTerms.filter(term => {
+        const lowerTerm = term.toLowerCase();
+        return targetBatch.some(b => b.text.toLowerCase().includes(lowerTerm));
+      });
+      const termsToShow = relevantProtected.length > 0 ? relevantProtected : protectedTerms.slice(0, 4);
+      if (termsToShow.length > 0) {
+        prompt += `DO-NOT-TRANSLATE TERMS (Keep exact English spelling untouched):\n  [ ${termsToShow.map(t => `"${t}"`).join(', ')} ]\n  • Example: "... with ${termsToShow[0]} now" ➔ "... با ${termsToShow[0]} اکنون"\n\n`;
+      }
+    }
+
+    if (pre.length > 0) {
+      prompt += `PAST CONTEXT (reference only; do not translate):\n${pre.map(formatCleanContextPre).join('\n')}\n\n`;
+    }
+
+    if (useParagraphMode) {
+      prompt += `TARGET PARAGRAPH (read continuously for tone & flow; translate each marked cue):\n${targetLines}\n`;
+    } else {
+      prompt += `TARGET CUES (translate each item by its ID):\n${targetLines}\n`;
+    }
+
+    if (post.length > 0) {
+      prompt += `\nFUTURE CONTEXT (reference only; do not translate):\n${post.map(b => `⟦${b.id}⟧ ${b.text.replace(/\s+/g, ' ').trim()}`).join('\n')}\n`;
+    }
+
+    prompt += `\nTranslate every TARGET CUE without including ⟦id⟧ markers inside translatedText. Return ONLY a valid JSON array: [{"id": number, "translatedText": "..."}].`;
+    return prompt;
+  }
+
   if (!useParagraphMode) {
     let prompt = `--- CONTEXTUAL BATCHING PROTOCOL ---
 `;
@@ -686,8 +1010,24 @@ export const translateBatch = async (
   signal?: AbortSignal
 ): Promise<BatchResponse[]> => {
   let attempt = 0;
+  let validationRetries = 0;
   let overloadRetries = 0; 
   const { maxRetries, baseDelay, overloadWaitMs } = APP_CONFIG.retryConfig;
+
+  // TM Check & Cue Pruning (Exclusively for Gemini when enableTranslationMemory !== false)
+  let effectiveTargetBatch = targetBatch;
+  let cachedResponsesFromTM: BatchResponse[] = [];
+
+  if (settings.aiProvider === 'gemini' && settings.enableTranslationMemory !== false) {
+    const memoryResult = filterBatchWithMemory(targetBatch);
+    cachedResponsesFromTM = memoryResult.cachedResponses;
+    effectiveTargetBatch = memoryResult.uncachedBatch;
+
+    // If 100% of cues were resolved from Translation Memory, return immediately without calling Gemini API
+    if (effectiveTargetBatch.length === 0) {
+      return cachedResponsesFromTM.sort((a, b) => a.id - b.id);
+    }
+  }
 
   let modelName = APP_CONFIG.geminiModels.standard;
   if (settings.model === 'professional') modelName = APP_CONFIG.geminiModels.professional;
@@ -696,8 +1036,11 @@ export const translateBatch = async (
 
   const keyManager = new APIKeyManager(settings.apiKeys);
   const totalAllowedAttempts = maxRetries + settings.apiKeys.length * 2;
-  const targetIds = targetBatch.map(block => block.id);
-  
+
+  // Track selective validation & accumulated valid responses (Gemini provider only)
+  const accumulatedValidResponses = new Map<number, string>();
+  let currentTargetBatch = effectiveTargetBatch;
+
   while (attempt < totalAllowedAttempts) {
     let currentApiKey = '';
     try {
@@ -705,14 +1048,35 @@ export const translateBatch = async (
         currentApiKey = keyManager.getActiveKey();
       }
 
-      // Local/OpenAI-compatible models usually translate better when subtitle fragments are sent
-      // as one marked paragraph instead of isolated JSON rows.
+      // For non-Gemini, targetBatch is sent as before.
+      // For Gemini, currentTargetBatch holds ONLY uncached and still-problematic cues!
+      const activeBatch = settings.aiProvider === 'gemini' ? currentTargetBatch : targetBatch;
+      const targetIds = activeBatch.map(block => block.id);
+
       const promptMethod = forceParagraphMode || settings.aiProvider !== 'gemini' ? 'paragraph' : 'default';
+
+      // Build context: if selective retry is underway for Gemini, feed previous translated cues as rich context
+      let effectivePre = contextPre;
+      if (settings.aiProvider === 'gemini' && currentTargetBatch.length < effectiveTargetBatch.length && currentTargetBatch.length > 0) {
+        const priorCompleted = effectiveTargetBatch
+          .filter(b => b.id < currentTargetBatch[0].id)
+          .map(b => ({
+            id: b.id,
+            text: accumulatedValidResponses.has(b.id)
+              ? `${b.text} (existing translation: ${accumulatedValidResponses.get(b.id)})`
+              : b.text
+          }));
+        effectivePre = [...contextPre, ...priorCompleted].slice(-GEMINI_CONTEXT_PRE_WINDOW);
+      }
+
       const userPrompt = buildContextualTranslationPrompt(
-        targetBatch,
-        contextPre,
+        activeBatch,
+        effectivePre,
         contextPost,
-        promptMethod === 'paragraph'
+        promptMethod === 'paragraph',
+        settings.aiProvider === 'gemini',
+        settings.glossary,
+        settings.doNotTranslateTerms
       );
 
       const systemInstruction = getSystemInstruction(
@@ -746,22 +1110,211 @@ export const translateBatch = async (
 
       signal?.throwIfAborted();
       const ai = new GoogleGenAI({ apiKey: currentApiKey });
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: userPrompt,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema: responseSchema,
-          temperature: settings.temperature,
-          safetySettings: SAFETY_SETTINGS,
-        },
-      });
+
+      // Only apply Core/Dynamic separation and Context Caching when provider is Gemini
+      const coreInstruction = getCoreSystemInstruction(settings.targetLanguage, promptMethod);
+      const dynamicInstruction = getDynamicSystemInstruction(
+        settings.tone,
+        settings.topic,
+        settings.customPrompt,
+        settings.outputStandard,
+        settings.glossary,
+        settings.doNotTranslateTerms,
+        settings.targetLanguage
+      );
+
+      let cachedContentName: string | null = null;
+      try {
+        cachedContentName = await getOrEstablishGeminiCache(ai, modelName, currentApiKey, coreInstruction, signal);
+      } catch {
+        cachedContentName = null;
+      }
+
+      const geminiTemp = getGeminiTemperature(
+        settings.temperature,
+        settings.topic,
+        settings.tone,
+        settings.model,
+        validationRetries
+      );
+
+      const generateConfig: any = {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: geminiTemp,
+        safetySettings: SAFETY_SETTINGS,
+      };
+
+      let contents = userPrompt;
+      if (cachedContentName) {
+        generateConfig.cachedContent = cachedContentName;
+        if (dynamicInstruction) {
+          contents = `--- DYNAMIC RULES ---\n${dynamicInstruction}\n\n${userPrompt}`;
+        }
+      } else {
+        generateConfig.systemInstruction = systemInstruction;
+      }
+
+      let response: any;
+      try {
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents: contents,
+          config: generateConfig,
+        });
+      } catch (genErr: any) {
+        if (cachedContentName) {
+          geminiContextCacheMap.delete(`${modelName}_${currentApiKey.slice(-6)}_${coreInstruction.length}`);
+          response = await ai.models.generateContent({
+            model: modelName,
+            contents: userPrompt,
+            config: {
+              systemInstruction: systemInstruction,
+              responseMimeType: "application/json",
+              responseSchema: responseSchema,
+              temperature: geminiTemp,
+              safetySettings: SAFETY_SETTINGS,
+            },
+          });
+        } else {
+          throw genErr;
+        }
+      }
 
       signal?.throwIfAborted();
       if (!response.text) throw new Error("Empty response from Gemini");
 
-      return validateBatchResponse(targetIds, JSON.parse(response.text));
+      // Selective validation exclusively for Gemini
+      if (settings.aiProvider === 'gemini') {
+        const rawParsed = JSON.parse(extractJsonArray(response.text));
+        const validationResult = validateSelectiveBatchResponse(currentTargetBatch, rawParsed);
+
+        // Collect newly validated responses
+        for (const validItem of validationResult.validResponses) {
+          accumulatedValidResponses.set(validItem.id, validItem.translatedText);
+        }
+
+        const remainingUnresolved = effectiveTargetBatch.filter(b => !accumulatedValidResponses.has(b.id));
+
+        if (remainingUnresolved.length === 0) {
+          // All cues in batch successfully validated
+          let validatedResponses: BatchResponse[] = effectiveTargetBatch.map(b => ({
+            id: b.id,
+            translatedText: accumulatedValidResponses.get(b.id)!
+          }));
+
+          // Lightweight standards compliance pass exclusively for Gemini:
+          // Detect cues violating line length (CPL) or reading speed (CPS)
+          const problematicCues: SubtitleComplianceIssue[] = [];
+          for (const item of validatedResponses) {
+            const cueBlock = effectiveTargetBatch.find(b => b.id === item.id);
+            if (cueBlock) {
+              const issue = checkCueStandardCompliance(cueBlock, item.translatedText, settings.outputStandard, settings.targetLanguage);
+              if (issue) {
+                problematicCues.push(issue);
+              }
+            }
+          }
+
+          const MAX_PROBLEMATIC_REWRITE_CUES = 3;
+          const MAX_PROBLEMATIC_RATIO = 0.35;
+
+          // Only perform light rewrite if 1 to 3 cues are flagged (skip if 0 or if too many to prevent token explosion)
+          if (
+            problematicCues.length > 0 &&
+            problematicCues.length <= MAX_PROBLEMATIC_REWRITE_CUES &&
+            problematicCues.length <= Math.ceil(effectiveTargetBatch.length * MAX_PROBLEMATIC_RATIO)
+          ) {
+            try {
+              signal?.throwIfAborted();
+              const refinedMap = await refineProblematicCuesForStandards(
+                ai,
+                modelName,
+                problematicCues,
+                settings,
+                signal
+              );
+
+              if (refinedMap.size > 0) {
+                validatedResponses = validatedResponses.map(item => {
+                  const refinedText = refinedMap.get(item.id);
+                  if (refinedText && refinedText.trim()) {
+                    return { id: item.id, translatedText: refinedText };
+                  }
+                  return item;
+                });
+              }
+            } catch (refineErr: any) {
+              // Non-blocking: keep existing validated translations if network/quota hiccups occur
+              console.warn('[Gemini Standards Refine] Light rewrite pass skipped due to error:', refineErr?.message || refineErr);
+            }
+          } else if (problematicCues.length > MAX_PROBLEMATIC_REWRITE_CUES) {
+            console.log(`[Gemini Standards Refine] Skipped: ${problematicCues.length} cues flagged, exceeding safety threshold (max ${MAX_PROBLEMATIC_REWRITE_CUES}). Preserving token quota.`);
+          }
+
+          // Populate TM with newly translated cues for future reuse
+          if (settings.enableTranslationMemory !== false) {
+            const toSave = effectiveTargetBatch.map(b => {
+              const res = validatedResponses.find(r => r.id === b.id);
+              return res ? { sourceText: b.text, translatedText: res.translatedText } : null;
+            }).filter(Boolean) as { sourceText: string; translatedText: string }[];
+
+            if (toSave.length > 0) {
+              addBatchToMemory(toSave);
+            }
+          }
+
+          if (cachedResponsesFromTM.length > 0) {
+            return [...cachedResponsesFromTM, ...validatedResponses].sort((a, b) => a.id - b.id);
+          }
+
+          return validatedResponses;
+        }
+
+        // Validation issues detected: selective retry only for problematic/unresolved cues
+        validationRetries++;
+        attempt++;
+        currentTargetBatch = remainingUnresolved;
+
+        // If retries exhausted, perform soft-fill fallback for remaining cues to preserve subtitle alignment
+        if (attempt >= totalAllowedAttempts || validationRetries >= maxRetries) {
+          console.warn(`[Gemini Selective Retry] Max retries reached with ${remainingUnresolved.length} unresolved cue(s). Applying soft-fill fallback.`);
+          for (const block of remainingUnresolved) {
+            accumulatedValidResponses.set(
+              block.id,
+              block.previousTranslatedText?.trim() || block.text
+            );
+          }
+
+          const fallbackResponses: BatchResponse[] = effectiveTargetBatch.map(b => ({
+            id: b.id,
+            translatedText: accumulatedValidResponses.get(b.id)!
+          }));
+
+          if (settings.enableTranslationMemory !== false) {
+            const validToSave = effectiveTargetBatch
+              .filter(b => !remainingUnresolved.some(r => r.id === b.id))
+              .map(b => ({ sourceText: b.text, translatedText: accumulatedValidResponses.get(b.id)! }));
+            if (validToSave.length > 0) {
+              addBatchToMemory(validToSave);
+            }
+          }
+
+          if (cachedResponsesFromTM.length > 0) {
+            return [...cachedResponsesFromTM, ...fallbackResponses].sort((a, b) => a.id - b.id);
+          }
+
+          return fallbackResponses;
+        }
+
+        // Small adaptive delay for validation retry
+        await delay(Math.min(baseDelay * Math.pow(1.2, validationRetries), 1500));
+        continue;
+      }
+
+      // Non-Gemini validation
+      const validatedResponses = validateBatchResponse(targetIds, JSON.parse(extractJsonArray(response.text)));
+      return validatedResponses;
 
     } catch (error: any) {
       if (signal?.aborted || error?.name === 'AbortError') throw error;
@@ -787,12 +1340,64 @@ export const translateBatch = async (
         if (onKeyRateLimit && currentApiKey) onKeyRateLimit(currentApiKey);
         if (!keyManager.hasAvailableKeys()) throw new Error("429 Quota Exhausted");
         await delay(1000); 
-      } else {
-        attempt++;
-        await delay(baseDelay * Math.pow(1.5, attempt));
+        continue;
       }
+
+      if (
+        errorMessage.includes('Invalid model response') ||
+        errorMessage.includes('JSON') ||
+        errorMessage.includes('Empty response') ||
+        errorMessage.includes('missing ids') ||
+        errorMessage.includes('unexpected id') ||
+        errorMessage.includes('repeated translations')
+      ) {
+        validationRetries++;
+      }
+      attempt++;
+
+      if (settings.aiProvider === 'gemini') {
+        currentTargetBatch = effectiveTargetBatch.filter(b => !accumulatedValidResponses.has(b.id));
+
+        // Soft-fill if retry budget exhausted
+        if (attempt >= totalAllowedAttempts || validationRetries >= maxRetries) {
+          if (accumulatedValidResponses.size > 0) {
+            for (const block of effectiveTargetBatch) {
+              if (!accumulatedValidResponses.has(block.id)) {
+                accumulatedValidResponses.set(block.id, block.previousTranslatedText?.trim() || block.text);
+              }
+            }
+            const fallbackResponses: BatchResponse[] = effectiveTargetBatch.map(b => ({
+              id: b.id,
+              translatedText: accumulatedValidResponses.get(b.id)!
+            }));
+            if (cachedResponsesFromTM.length > 0) {
+              return [...cachedResponsesFromTM, ...fallbackResponses].sort((a, b) => a.id - b.id);
+            }
+            return fallbackResponses;
+          }
+        }
+      }
+
+      await delay(baseDelay * Math.pow(1.5, attempt));
     }
   }
+
+  if (settings.aiProvider === 'gemini' && accumulatedValidResponses.size > 0) {
+    for (const block of effectiveTargetBatch) {
+      if (!accumulatedValidResponses.has(block.id)) {
+        accumulatedValidResponses.set(block.id, block.previousTranslatedText?.trim() || block.text);
+      }
+    }
+    const fallbackResponses: BatchResponse[] = effectiveTargetBatch.map(b => ({
+      id: b.id,
+      translatedText: accumulatedValidResponses.get(b.id)!
+    }));
+    if (cachedResponsesFromTM.length > 0) {
+      return [...cachedResponsesFromTM, ...fallbackResponses].sort((a, b) => a.id - b.id);
+    }
+    return fallbackResponses;
+  }
+
   throw new Error("Batch processing failed after retries.");
 };
 
@@ -806,6 +1411,7 @@ export const retranslateSelectedBlocks = async (
   signal?: AbortSignal
 ): Promise<BatchResponse[]> => {
   let attempt = 0;
+  let validationRetries = 0;
   const { maxRetries, baseDelay, overloadWaitMs } = APP_CONFIG.retryConfig;
   const targetIds = targetBatch.map(block => block.id);
   const userPrompt = buildSelectedRetranslationPrompt(targetBatch, contextPre, contextPost);
@@ -849,20 +1455,80 @@ export const retranslateSelectedBlocks = async (
 
       currentApiKey = keyManager.getActiveKey();
       const ai = new GoogleGenAI({ apiKey: currentApiKey });
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: userPrompt,
-        config: {
-          systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema,
-          temperature: Math.max(0.2, settings.temperature - 0.1),
-          safetySettings: SAFETY_SETTINGS,
-        },
-      });
+
+      // Dynamic temperature for Gemini retranslation (validationRetries + 1 ensures disciplined focus)
+      const geminiTemp = getGeminiTemperature(
+        settings.temperature,
+        settings.topic,
+        settings.tone,
+        settings.model,
+        validationRetries + 1
+      );
+
+      // Apply Core/Dynamic separation and Context Caching for Gemini retranslation
+      const coreInstruction = getCoreSystemInstruction(settings.targetLanguage, 'default');
+      const dynamicInstruction = getDynamicSystemInstruction(
+        settings.tone,
+        settings.topic,
+        settings.customPrompt,
+        settings.outputStandard,
+        settings.glossary,
+        settings.doNotTranslateTerms,
+        settings.targetLanguage
+      );
+
+      let cachedContentName: string | null = null;
+      try {
+        cachedContentName = await getOrEstablishGeminiCache(ai, modelName, currentApiKey, coreInstruction, signal);
+      } catch {
+        cachedContentName = null;
+      }
+
+      const generateConfig: any = {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: geminiTemp,
+        safetySettings: SAFETY_SETTINGS,
+      };
+
+      let contents = userPrompt;
+      if (cachedContentName) {
+        generateConfig.cachedContent = cachedContentName;
+        if (dynamicInstruction) {
+          contents = `--- DYNAMIC RULES ---\n${dynamicInstruction}\n\n${userPrompt}`;
+        }
+      } else {
+        generateConfig.systemInstruction = systemInstruction;
+      }
+
+      let response: any;
+      try {
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents: contents,
+          config: generateConfig,
+        });
+      } catch (err: any) {
+        if (cachedContentName) {
+          geminiContextCacheMap.delete(`${modelName}_${currentApiKey.slice(-6)}_${coreInstruction.length}`);
+          response = await ai.models.generateContent({
+            model: modelName,
+            contents: userPrompt,
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+              responseSchema: responseSchema,
+              temperature: geminiTemp,
+              safetySettings: SAFETY_SETTINGS,
+            },
+          });
+        } else {
+          throw err;
+        }
+      }
 
       if (!response.text) throw new Error("Empty selected retranslation response from Gemini");
-      return validateBatchResponse(targetIds, JSON.parse(response.text));
+      return validateBatchResponse(targetIds, JSON.parse(extractJsonArray(response.text)));
     } catch (error: any) {
       if (error?.name === 'AbortError') throw error;
       const errorMessage = extractErrorDetails(error);
@@ -884,6 +1550,16 @@ export const retranslateSelectedBlocks = async (
         if (!keyManager.hasAvailableKeys()) throw new Error("429 Quota Exhausted");
         await delay(1000);
       } else {
+        if (
+          errorMessage.includes('Invalid model response') ||
+          errorMessage.includes('JSON') ||
+          errorMessage.includes('Empty') ||
+          errorMessage.includes('missing ids') ||
+          errorMessage.includes('unexpected id') ||
+          errorMessage.includes('repeated translations')
+        ) {
+          validationRetries++;
+        }
         attempt++;
         await delay(baseDelay * Math.pow(1.5, attempt));
       }

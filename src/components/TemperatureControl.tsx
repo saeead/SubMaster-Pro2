@@ -46,11 +46,11 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
   const presetDescription = TOPIC_TEMPERATURE_DEFAULTS[topic]?.description || '';
 
   return (
-    <div className="rounded-2xl border border-[#1e2a5e] bg-surface/50 p-4 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-[#2b3c7e]">
+    <div className="rounded-2xl border border-border bg-surface/50 p-4 shadow-xs backdrop-blur-md transition-all duration-200 hover:border-primary/40">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#24336a] bg-[#1a2550] text-primary">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-border dark:bg-[#1a2550] bg-sky-50 text-primary">
              <Thermometer className="w-3.5 h-3.5" />
           </div>
           <div>
@@ -58,7 +58,7 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
             <span className="text-[10px] text-text-muted">تنظیم دمای نمونه‌برداری مدل</span>
           </div>
         </div>
-        <span className="rounded-md border border-[#24336a] bg-[#1a2550] px-2 py-0.5 font-mono text-xs font-bold text-primary shadow-xs">
+        <span className="rounded-md border border-border dark:bg-[#1a2550] bg-sky-50 px-2 py-0.5 font-mono text-xs font-bold text-primary shadow-xs">
           {localTemp.toFixed(2)}
         </span>
       </div>
@@ -97,15 +97,15 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
                 width: 18px;
                 border-radius: 50%;
                 background: #38bdf8;
-                border: 2px solid #1e2a5e;
+                border: 2px solid var(--border-color);
                 cursor: pointer;
-                box-shadow: 0 0 10px rgba(30, 42, 94, 0.6);
+                box-shadow: 0 0 10px rgba(14, 165, 233, 0.4);
                 margin-top: -5px;
                 transition: transform 0.15s ease, box-shadow 0.15s ease;
             }
             input[type=range]::-webkit-slider-thumb:hover {
                 transform: scale(1.15);
-                box-shadow: 0 0 14px rgba(46, 64, 133, 0.8);
+                box-shadow: 0 0 14px rgba(14, 165, 233, 0.6);
             }
             input[type=range]::-webkit-slider-runnable-track {
                 width: 100%;
@@ -129,7 +129,7 @@ export const TemperatureControl: React.FC<TemperatureControlProps> = ({ temperat
       </div>
 
       {/* Status Bar */}
-      <div className="flex items-center justify-between rounded-lg border border-[#1e2a5e] bg-[#131b3e] px-3 py-1.5 text-center">
+      <div className="flex items-center justify-between rounded-lg border border-border dark:bg-[#131b3e] bg-slate-100 px-3 py-1.5 text-center">
         <span className="w-full text-center text-xs font-semibold text-text">
           {getLabel()}
         </span>

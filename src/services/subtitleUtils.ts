@@ -680,3 +680,69 @@ export const fixNetflixStandards = (blocks: SubtitleBlock[], standard: OutputSta
     return { ...block, endTime: msToTime(endMs) };
   });
 };
+
+export const getStandardLimits = (standard: OutputStandard = 'netflix'): { cplLimit: number; cpsLimit: number } => {
+  const cplLimit = standard === 'bbc' ? 37 : standard === 'broadcast' ? 39 : 42;
+  const cpsLimit = standard === 'bbc' ? 17 : standard === 'broadcast' ? 18 : 20;
+  return { cplLimit, cpsLimit };
+};
+
+export interface SubtitleComplianceIssue {
+  id: number;
+  sourceText: string;
+  currentText: string;
+  cpl: number;
+  cps: number;
+  lineCount: number;
+  issues: string[];
+}
+
+export const checkCueStandardCompliance = (
+  cue: { id: number; text: string; startTime?: string; endTime?: string },
+  translatedText: string,
+  standard: OutputStandard = 'netflix',
+  targetLanguage: TargetLanguage = 'fa'
+): SubtitleComplianceIssue | null => {
+  const { cplLimit, cpsLimit } = getStandardLimits(standard);
+  const formatted = formatSubtitleForLanguage(translatedText, targetLanguage);
+  const lines = formatted.split('\n');
+  const maxLineLength = Math.max(...lines.map(l => l.length));
+
+  let durationSec = 0;
+  if (cue.startTime && cue.endTime) {
+    const durMs = timeToMs(cue.endTime) - timeToMs(cue.startTime);
+    if (durMs > 0) durationSec = durMs / 1000;
+  }
+  if (durationSec <= 0) {
+    const wordCount = cue.text.trim().split(/\s+/).filter(Boolean).length;
+    durationSec = Math.max(1.2, Math.min(7.0, wordCount * 0.45));
+  }
+
+  const charCount = countChars(translatedText);
+  const cps = durationSec > 0 ? Number((charCount / durationSec).toFixed(1)) : 0;
+
+  const issues: string[] = [];
+  if (maxLineLength > cplLimit) {
+    issues.push(`Line length ${maxLineLength} (max ${cplLimit})`);
+  }
+  if (lines.length > 2) {
+    issues.push(`Line count ${lines.length} (max 2 lines)`);
+  }
+  if (cps > cpsLimit) {
+    issues.push(`Reading speed ${cps} CPS (max ${cpsLimit} CPS)`);
+  }
+
+  if (issues.length > 0) {
+    return {
+      id: cue.id,
+      sourceText: cue.text,
+      currentText: translatedText,
+      cpl: maxLineLength,
+      cps,
+      lineCount: lines.length,
+      issues
+    };
+  }
+  return null;
+};
+

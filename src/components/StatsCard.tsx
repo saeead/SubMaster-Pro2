@@ -188,11 +188,11 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                     </span>
                 </div>
                 <div className="text-right">
-                    <span className="text-sm font-bold text-white">{percentage}%</span>
+                    <span className="text-sm font-bold text-text">{percentage}%</span>
                 </div>
             </div>
             
-            <div className="overflow-hidden h-4 mb-4 text-xs flex rounded-full bg-[#0a0e27] border border-white/10 relative">
+            <div className="overflow-hidden h-4 mb-4 text-xs flex rounded-full dark:bg-[#0a0e27] bg-slate-100 border dark:border-white/10 border-slate-200 relative">
                 <div 
                     style={{ width: `${percentage}%` }} 
                     className={`
@@ -204,18 +204,18 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                     `}
                 >
                      {isProcessing && (
-                         <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
                      )}
                 </div>
             </div>
         </div>
 
         {!isProcessing && (isReady || isPaused || isCancelled || isError) && (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+            <div className="rounded-2xl border dark:border-white/10 border-slate-200 dark:bg-white/[0.03] bg-slate-50/50 p-4 space-y-3">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div>
-                        <h4 className="text-sm font-bold text-white">روش ترجمه</h4>
-                        <p className="text-xs text-white/50 mt-1">قبل از شروع ترجمه انتخاب کنید متن با روش پیش‌فرض ارسال شود یا به متن یک‌پارچه پاراگرافی تبدیل شود.</p>
+                        <h4 className="text-sm font-bold text-text">روش ترجمه</h4>
+                        <p className="text-xs text-text-muted mt-1">قبل از شروع ترجمه انتخاب کنید متن با روش پیش‌فرض ارسال شود یا به متن یک‌پارچه پاراگرافی تبدیل شود.</p>
                     </div>
                     <div className="flex w-full flex-col gap-3 md:w-auto md:min-w-[560px]">
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2" role="radiogroup" aria-label="روش ترجمه">
@@ -224,20 +224,20 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                             role="radio"
                             aria-checked={translationMethod === 'default'}
                             onClick={() => onTranslationMethodChange('default')}
-                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'default' ? 'border-[#00f0ff] bg-[#00f0ff]/10 text-white shadow-[0_0_15px_rgba(0,240,255,0.15)]' : 'border-white/10 bg-black/10 text-white/60 hover:bg-white/5'}`}
+                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'default' ? 'border-[#00f0ff] bg-[#00f0ff]/10 text-primary font-bold shadow-xs' : 'dark:border-white/10 border-slate-200 dark:bg-black/10 bg-white text-text-muted hover:text-text'}`}
                         >
                             <span className="block text-sm font-bold">متد پیش‌فرض</span>
-                            <span className="block text-[11px] mt-1">ارسال بلوک‌های JSON با قوانین قبلی نرم‌افزار</span>
+                            <span className="block text-[11px] mt-1 opacity-80">ارسال بلوک‌های JSON با قوانین قبلی نرم‌افزار</span>
                         </button>
                         <button
                             type="button"
                             role="radio"
                             aria-checked={translationMethod === 'paragraph'}
                             onClick={() => onTranslationMethodChange('paragraph')}
-                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'paragraph' ? 'border-[#ff00ea] bg-[#ff00ea]/10 text-white shadow-[0_0_15px_rgba(255,0,234,0.15)]' : 'border-white/10 bg-black/10 text-white/60 hover:bg-white/5'}`}
+                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'paragraph' ? 'border-[#ff00ea] bg-[#ff00ea]/10 text-secondary font-bold shadow-xs' : 'dark:border-white/10 border-slate-200 dark:bg-black/10 bg-white text-text-muted hover:text-text'}`}
                         >
                             <span className="block text-sm font-bold">متد پاراگراف</span>
-                            <span className="block text-[11px] mt-1">متن یک‌پارچه با نشانگر ID و بازگردانی به زمان‌بندی اصلی</span>
+                            <span className="block text-[11px] mt-1 opacity-80">متن یک‌پارچه با نشانگر ID و بازگردانی به زمان‌بندی اصلی</span>
                         </button>
 
                         <button
@@ -246,10 +246,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                             aria-checked={translationMethod === 'subtitle_translator'}
                             onClick={() => onTranslationMethodChange('subtitle_translator')}
                             title="بر اساس راهبرد rockbenben/subtitle-translator: استخراج محلی ساختار، ترجمهٔ فقط دیالوگ‌ها، و بازنشانی ترجمه در همان جایگاه‌های اصلی."
-                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'subtitle_translator' ? 'border-[#38bdf8] bg-[#38bdf8]/10 text-white shadow-[0_0_15px_rgba(56,189,248,0.15)]' : 'border-white/10 bg-black/10 text-white/60 hover:bg-white/5'}`}
+                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'subtitle_translator' ? 'border-[#38bdf8] bg-[#38bdf8]/10 text-sky-500 font-bold shadow-xs' : 'dark:border-white/10 border-slate-200 dark:bg-black/10 bg-white text-text-muted hover:text-text'}`}
                         >
                             <span className="block text-sm font-bold">Subtitle Translator</span>
-                            <span className="block text-[11px] mt-1">گزینهٔ مستقل الهام‌گرفته از ریپوی NewZone: فقط متن گفتار ترجمه می‌شود و ساختار هر بلوک دست‌نخورده بازسازی می‌گردد.</span>
+                            <span className="block text-[11px] mt-1 opacity-80">گزینهٔ مستقل الهام‌گرفته از ریپوی NewZone: فقط متن گفتار ترجمه می‌شود و ساختار هر بلوک دست‌نخورده بازسازی می‌گردد.</span>
                         </button>
                         <button
                             type="button"
@@ -257,10 +257,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                             aria-checked={translationMethod === 'skeleton_str'}
                             onClick={() => onTranslationMethodChange('skeleton_str')}
                             title="ساختار فایل در دستگاه شما می‌ماند؛ فقط دیالوگ‌ها با بافت پیرامونی ترجمه و سپس در زمان‌بندی اصلی بازگردانده می‌شوند."
-                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'skeleton_str' ? 'border-[#a3e635] bg-[#a3e635]/10 text-white shadow-[0_0_15px_rgba(163,230,53,0.15)]' : 'border-white/10 bg-black/10 text-white/60 hover:bg-white/5'}`}
+                            className={`rounded-xl border px-4 py-3 text-right transition-all ${translationMethod === 'skeleton_str' ? 'border-[#a3e635] bg-[#a3e635]/10 text-lime-600 dark:text-[#a3e635] font-bold shadow-xs' : 'dark:border-white/10 border-slate-200 dark:bg-black/10 bg-white text-text-muted hover:text-text'}`}
                         >
                             <span className="block text-sm font-bold">Skeleton STR <span className="text-xs font-normal">(اسکلت‌محور STR)</span></span>
-                            <span className="block text-[11px] mt-1">فقط دیالوگ‌ها را با دسته‌های بافت‌دار و شماره‌گذاری‌شده ترجمه می‌کند و آن‌ها را در زمان‌بندی اصلی می‌نویسد. روش‌های دیگر تغییری نمی‌کنند.</span>
+                            <span className="block text-[11px] mt-1 opacity-80">فقط دیالوگ‌ها را با دسته‌های بافت‌دار و شماره‌گذاری‌شده ترجمه می‌کند و آن‌ها را در زمان‌بندی اصلی می‌نویسد. روش‌های دیگر تغییری نمی‌کنند.</span>
                         </button>
                     </div>
                     </div>
@@ -339,7 +339,7 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {isProcessing && (
                 <button 
                     onClick={onPause}
-                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#1a2550] hover:bg-[#223068] text-white border border-[#2b3c7e] text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl dark:bg-[#1a2550] dark:hover:bg-[#223068] bg-slate-100 hover:bg-slate-200 text-text border dark:border-[#2b3c7e] border-slate-200 text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
                  >
                     <Pause className="w-4 h-4 fill-current" />
                     <span>توقف</span>
@@ -396,7 +396,7 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {totalFiles > 1 && (
                  <button 
                     onClick={onDownloadZip}
-                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#1a2550] hover:bg-[#223068] text-white border border-[#2b3c7e] text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl dark:bg-[#1a2550] dark:hover:bg-[#223068] bg-slate-100 hover:bg-slate-200 text-text border dark:border-[#2b3c7e] border-slate-200 text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
                     title="دانلود همه فایل‌ها بصورت زیپ"
                   >
                     <Archive className="w-4 h-4" />
@@ -408,7 +408,7 @@ export const StatsCard: React.FC<StatsCardProps> = ({
              {(isCompleted || isCancelled) && (
                  <button 
                     onClick={onNewProject}
-                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-[#141d42] hover:bg-[#1c295c] text-white/80 hover:text-white border border-[#24336a] text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
+                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl dark:bg-[#141d42] dark:hover:bg-[#1c295c] bg-slate-100 hover:bg-slate-200 text-text border dark:border-[#24336a] border-slate-200 text-sm font-semibold whitespace-nowrap transition-all shadow-xs"
                   >
                     <RefreshCw className="w-4 h-4" />
                     <span>پروژه جدید</span>
