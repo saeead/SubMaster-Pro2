@@ -9,16 +9,25 @@ export const APP_CONFIG = {
   maxFilesPerUpload: 50,
   supportedFormats: ['srt', 'vtt', 'ass'],
   geminiModels: {
-    standard: 'gemini-3-flash-preview',       
-    professional: 'gemini-3-pro-preview',    
-    flash: 'gemini-2.5-flash-latest',       
-    flash_lite: 'gemini-flash-lite-latest' 
+    standard: 'gemini-3.8-flash',       // آخرین مدل فلش، سریع و رایگان (پیش‌فرض نرم‌افزار)
+    professional: 'gemini-3.1-pro-preview', // مدل پرمیوم و استدلال پیشرفته (ویژه کلیدهای API پولی)
+    flash: 'gemini-flash-latest',       // فلش پویا (هدایت خودکار به آخرین نسخه پایدار فلش)
+    flash_lite: 'gemini-3.1-flash-lite' // فلش لایت (سبک، فوق‌سریع و اقتصادی)
   },
   retryConfig: {
     maxRetries: 5, 
     baseDelay: 6000, 
     overloadWaitMs: 30000, 
   }
+};
+
+export const DEFAULT_GEMINI_MODEL = APP_CONFIG.geminiModels.standard;
+
+export const getResolvedGeminiModel = (modelType?: ModelType): string => {
+  if (modelType === 'professional') return APP_CONFIG.geminiModels.professional;
+  if (modelType === 'flash') return APP_CONFIG.geminiModels.flash;
+  if (modelType === 'flash_lite') return APP_CONFIG.geminiModels.flash_lite;
+  return APP_CONFIG.geminiModels.standard;
 };
 
 export const OPTIMIZATION_CONFIG = {
@@ -66,16 +75,33 @@ export const DELAY_BETWEEN_BATCHES_MS = 4200;
 export const DELAY_BETWEEN_FILES_MS = 10000; 
 
 /** Select conservative throughput settings without penalising local providers. */
-export const getAdaptiveTranslationBatchSize = (provider: AIProvider, model: ModelType, method: TranslationMethod): number => {
+export const getAdaptiveTranslationBatchSize = (
+  provider: AIProvider, 
+  model: ModelType, 
+  method: TranslationMethod,
+  averageCharsPerCue?: number
+): number => {
   // Tagged subtitle translators are more reliable with short batches: every
   // target needs a distinct closing tag, and a single omission blocks recovery.
   if (method === 'subtitle_translator') {
-    if (provider === 'lm_studio') return 10;
+    if (provider === 'lm_studio') {
+      const base = 10;
+      if (averageCharsPerCue && averageCharsPerCue > 120) {
+        return Math.max(6, base - 3);
+      }
+      return base;
+    }
     if (provider === 'gtx' || provider === 'edge' || provider === 'deeplx') return 6;
     return 8;
   }
   if (method === 'skeleton_str') {
-    if (provider === 'lm_studio') return 24;
+    if (provider === 'lm_studio') {
+      const base = 24;
+      if (averageCharsPerCue && averageCharsPerCue > 120) {
+        return Math.max(16, base - 6);
+      }
+      return base;
+    }
     if (provider === 'gtx' || provider === 'edge' || provider === 'deeplx') return 10;
     return 20;
   }
@@ -90,14 +116,28 @@ export const getAdaptiveTranslationBatchSize = (provider: AIProvider, model: Mod
       return 18;
     }
     // Default method for Gemini
-    if (model === 'professional') return 12;
-    if (model === 'flash' || model === 'flash_lite') return 42;
+    if (model === 'professional') return 14;
+    if (model === 'flash' || model === 'flash_lite') return 36;
     return 24;
+  }
+
+  // LM Studio adaptive batch sizing optimized for local Gemma 4 (26B A4B) models:
+  // Reduced from 36 to the 18-24 range (20 for paragraph, 22 for default) to maintain
+  // context coherence, prevent hallucination/repetition, and avoid cue truncation
+  // while preserving high throughput. Auto-scales down if cues are unusually long (>120 chars).
+  if (provider === 'lm_studio') {
+    let base = 22;
+    if (method === 'paragraph') {
+      base = 20;
+    }
+    if (averageCharsPerCue && averageCharsPerCue > 120) {
+      return Math.max(14, base - 6);
+    }
+    return base;
   }
 
   // Non-Gemini providers: preserve exact previous logic
   if (method === 'paragraph') return model === 'professional' ? 12 : 16;
-  if (provider === 'lm_studio') return 36;
   if (provider === 'gtx' || provider === 'edge' || provider === 'deeplx') return 12;
   if (model === 'professional') return 14;
   if (model === 'flash' || model === 'flash_lite') return 36;
@@ -555,18 +595,18 @@ export const getSystemInstruction = (
 export const getMethodTranslationInstruction = (method: TranslationMethod, targetLanguage: TargetLanguage): string => {
   if (method === 'paragraph') {
     return `--- PARAGRAPH METHOD CONTRACT ---
-بافت کامل پاراگراف را برای درک بخوانید، سپس هر دیالوگ را با نشانگر شناسهٔ خودش به صورت مستقل ترجمه کنید. جابجایی محتوا به نشانگر دیگر، ادغام، یا خلاصه کردن ممنوع است.`;
+Read surrounding cues only to resolve ambiguity and maintain flow across cuts. Translate each dialogue item into its own marker; never summarize, omit, or replace a full cue with a fragment. Never move meaning from one cue marker into another. If a technical term needs clarification, put the original source term in parentheses.`;
   }
   if (method === 'skeleton_str') {
     return `--- SKELETON STR METHOD CONTRACT ---
-بافت صرفاً برای درک است. تمام تگ‌های شماره‌دار [TRANSLATE_X] را دقیقاً ترجمه کرده و فقط تگ‌های ترجمه‌شده را بازگردانید.`;
+Context cues are read-only anchors. Translate every requested tagged line ([TRANSLATE_X]) and return only the requested tagged lines without altering numbering or surrounding skeleton structure.`;
   }
   if (method === 'subtitle_translator') {
-    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT ---
-فقط خطوط دیالوگ داخل تگ‌های درخواستی [TRANSLATE_X] ترجمه می‌شوند. ساختار، زمان‌بندی و متادیتاها هرگز تغییر نخواهند کرد. دقیقا یک تگ خروجی به ازای هر تگ درخواستی بازگردانید.`;
+    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT (rockbenben/subtitle-translator style) ---
+Translate dialogue lines inside the requested [TRANSLATE_X] tags into professionally written native subtitles. Retain meaning, timing constraints, and register without modifying the outer structure.`;
   }
   return `--- STANDARD BATCH METHOD CONTRACT ---
-هر آیتم JSON را با وفاداری کامل و بدون خلاصه‌سازی ترجمه کرده و دقیقاً یک ترجمه طبیعی برای هر شناسه بازگردانید.`;
+Translate each JSON item with complete fidelity, returning exactly one native, un-summarized translation per requested item id.`;
 };
 
 export const LANGUAGE_PROMPTS: Record<TargetLanguage, string> = {

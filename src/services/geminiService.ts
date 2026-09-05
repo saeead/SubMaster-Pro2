@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic, GlossaryItem } from "../types";
-import { APP_CONFIG, getSystemInstruction, getCoreSystemInstruction, getDynamicSystemInstruction, LANGUAGE_PROMPTS, GEMINI_CONTEXT_PRE_WINDOW, GEMINI_CONTEXT_POST_WINDOW, getGeminiTemperature } from "../constants";
+import { APP_CONFIG, DEFAULT_GEMINI_MODEL, getResolvedGeminiModel, getSystemInstruction, getCoreSystemInstruction, getDynamicSystemInstruction, LANGUAGE_PROMPTS, GEMINI_CONTEXT_PRE_WINDOW, GEMINI_CONTEXT_POST_WINDOW, getGeminiTemperature } from "../constants";
 import { SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION } from "./methods/skeleton_str";
 import { filterBatchWithMemory, addBatchToMemory } from "./translationMemory";
 import { getStandardLimits, checkCueStandardCompliance, SubtitleComplianceIssue } from "./subtitleUtils";
@@ -561,18 +561,60 @@ const callOpenAICompatibleChat = async (service: OpenAICompatibleService, temper
 
 const callLmStudioChat = async (settings: AppSettings, systemInstruction: string, userPrompt: string, signal?: AbortSignal): Promise<string> => {
   const baseUrl = normalizeLmStudioBaseUrl(settings.lmStudioBaseUrl);
+
+  // 1. Dynamic temperature based on settings and tone
+  // If settings.temperature is provided, use it as baseline, but adapt slightly by tone
+  // (slightly higher for movie/conversational natural flow, slightly lower for news/educational precision)
+  let lmTemp = typeof settings.temperature === 'number' ? settings.temperature : 0.35;
+  if (settings.tone === 'movie' || settings.tone === 'conversational') {
+    lmTemp = Math.min(1.0, lmTemp + 0.05);
+  } else if (settings.tone === 'news' || settings.tone === 'formal') {
+    lmTemp = Math.max(0.1, lmTemp - 0.05);
+  }
+  lmTemp = Math.round(lmTemp * 100) / 100;
+
+  // 2. Sampling parameters suitable for Gemma 4 (26B A4B) with optional settings overrides
+  const anySettings = settings as any;
+  const top_p = typeof anySettings?.lmStudioTopP === 'number' ? anySettings.lmStudioTopP : 0.95;
+  const top_k = typeof anySettings?.lmStudioTopK === 'number' ? anySettings.lmStudioTopK : 64;
+  const repeat_penalty = typeof anySettings?.lmStudioRepeatPenalty === 'number' 
+    ? anySettings.lmStudioRepeatPenalty 
+    : (typeof anySettings?.repeat_penalty === 'number' ? anySettings.repeat_penalty : 1.08);
+
+  // 3. Batch-proportional max_tokens (estimating prompt density and expected target batch size)
+  let maxTokens = 2048;
+  if (typeof anySettings?.lmStudioMaxTokens === 'number') {
+    maxTokens = anySettings.lmStudioMaxTokens;
+  } else {
+    // Estimate based on prompt length and batch density (bounded between 1500 and 3000)
+    const promptLen = (userPrompt || '').length;
+    if (promptLen > 3000) {
+      maxTokens = 3000;
+    } else if (promptLen < 800) {
+      maxTokens = 1500;
+    } else {
+      maxTokens = Math.min(3000, Math.max(1500, Math.round(promptLen * 0.8)));
+    }
+  }
+
+  const requestBody: Record<string, any> = {
+    model: settings.lmStudioModel || 'local-model',
+    messages: [
+      { role: 'system', content: systemInstruction },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: lmTemp,
+    top_p,
+    top_k,
+    repeat_penalty,
+    max_tokens: maxTokens,
+    stream: false
+  };
+
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: settings.lmStudioModel || 'local-model',
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: settings.temperature,
-      stream: false
-    }),
+    body: JSON.stringify(requestBody),
     signal
   });
 
@@ -942,7 +984,7 @@ export const validateAPIConnection = async (apiKey: string, strictMode: boolean 
   if (!apiKey) return false;
   try {
      const ai = new GoogleGenAI({ apiKey: apiKey });
-     await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'Hi' });
+     await ai.models.generateContent({ model: DEFAULT_GEMINI_MODEL, contents: 'Hi' });
      return true;
   } catch (e: any) {
      const errorMessage = extractErrorDetails(e);
@@ -951,6 +993,7 @@ export const validateAPIConnection = async (apiKey: string, strictMode: boolean 
 };
 
 export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings): Promise<string | null> => {
+    const testModel = DEFAULT_GEMINI_MODEL;
     try {
         // These transports are intentionally keyless. Their actual request will
         // surface provider-specific network/access diagnostics if unavailable.
@@ -969,7 +1012,7 @@ export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings
         }
         if (!apiKey) return 'هیچ کلید API معتبری یافت نشد.';
         const ai = new GoogleGenAI({ apiKey: apiKey });
-        await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'ping' });
+        await ai.models.generateContent({ model: testModel, contents: 'ping' });
         return null; 
     } catch (e: any) {
         if (settings?.aiProvider === 'lm_studio') {
@@ -980,7 +1023,7 @@ export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings
                 || settings.openAICompatibleServices[0]?.name;
             return getOpenAICompatibleFriendlyError(e, serviceName);
         }
-        return getFriendlyErrorMessage(e, 'gemini-2.5-flash');
+        return getFriendlyErrorMessage(e, testModel);
     }
 };
 
@@ -1029,10 +1072,7 @@ export const translateBatch = async (
     }
   }
 
-  let modelName = APP_CONFIG.geminiModels.standard;
-  if (settings.model === 'professional') modelName = APP_CONFIG.geminiModels.professional;
-  else if (settings.model === 'flash') modelName = APP_CONFIG.geminiModels.flash;
-  else if (settings.model === 'flash_lite') modelName = APP_CONFIG.geminiModels.flash_lite;
+  const modelName = getResolvedGeminiModel(settings.model);
 
   const keyManager = new APIKeyManager(settings.apiKeys);
   const totalAllowedAttempts = maxRetries + settings.apiKeys.length * 2;
@@ -1428,10 +1468,7 @@ export const retranslateSelectedBlocks = async (
     settings.aiProvider
   );
 
-  let modelName = APP_CONFIG.geminiModels.standard;
-  if (settings.model === 'professional') modelName = APP_CONFIG.geminiModels.professional;
-  else if (settings.model === 'flash') modelName = APP_CONFIG.geminiModels.flash;
-  else if (settings.model === 'flash_lite') modelName = APP_CONFIG.geminiModels.flash_lite;
+  const modelName = getResolvedGeminiModel(settings.model);
 
   const keyManager = new APIKeyManager(settings.apiKeys);
   const totalAllowedAttempts = maxRetries + settings.apiKeys.length * 2;
@@ -1583,8 +1620,9 @@ export const translateFreeText = async (text: string, settings: AppSettings, tar
         return callOpenAICompatibleChat(service, settings.temperature, `${LANGUAGE_PROMPTS[targetLang]}\n${targetLang === 'fa' ? 'Use natural Persian.' : 'Use natural target-language grammar and style.'}`, `${text}\n\nReturn only the translated text.`);
     }
     const ai = new GoogleGenAI({ apiKey: new APIKeyManager(settings.apiKeys).getActiveKey() });
+    const modelName = getResolvedGeminiModel(settings.model);
     const response = await ai.models.generateContent({
-        model: APP_CONFIG.geminiModels.standard,
+        model: modelName,
         contents: text,
         config: {
             systemInstruction: `${LANGUAGE_PROMPTS[targetLang]}\nTone: ${settings.tone}. Native flow, no translationese.`,
@@ -1619,7 +1657,8 @@ export const translateSkeletonPayload = async (content: string, settings: AppSet
   if (settings.aiProvider === 'openai_compatible') return callOpenAICompatibleChat(getActiveOpenAICompatibleService(settings), settings.temperature, systemInstruction, content, signal);
   signal?.throwIfAborted();
   const ai = new GoogleGenAI({ apiKey: new APIKeyManager(settings.apiKeys).getActiveKey() });
-  const response = await ai.models.generateContent({ model: APP_CONFIG.geminiModels.standard, contents: content, config: { systemInstruction, temperature: settings.temperature, safetySettings: SAFETY_SETTINGS } });
+  const modelName = getResolvedGeminiModel(settings.model);
+  const response = await ai.models.generateContent({ model: modelName, contents: content, config: { systemInstruction, temperature: settings.temperature, safetySettings: SAFETY_SETTINGS } });
   signal?.throwIfAborted();
   return response.text || '';
 };
