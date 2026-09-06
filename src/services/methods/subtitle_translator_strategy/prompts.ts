@@ -27,28 +27,20 @@ export const SUBTITLE_TRANSLATOR_FEW_SHOT_EXAMPLES = `--- نمونه‌های ا
 [نمونه ۱: دیالوگ پرکشش سینمایی و محاوره‌ای - Cinematic & Conversational]
 ورودی:
 [CONTEXT]We have been tracking their movements since midnight.[/CONTEXT]
-[TRANSLATE_10]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_10]
-[TRANSLATE_11]Just keep your head down and stick to the plan, alright?[/TRANSLATE_11]
+[TRANSLATE_9001]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_9001]
+[TRANSLATE_9002]Just keep your head down and stick to the plan, alright?[/TRANSLATE_9002]
 خروجی:
-[TRANSLATE_10]مگه عقلت رو از دست دادی؟ الان اصلاً نمی‌تونیم از پسش بربیایم![/TRANSLATE_10]
-[TRANSLATE_11]فقط سرت رو بنداز پایین و طبق نقشه پیش برو، باشه؟[/TRANSLATE_11]
+[TRANSLATE_9001]مگه عقلت رو از دست دادی؟ الان اصلاً نمی‌تونیم از پسش بربیایم![/TRANSLATE_9001]
+[TRANSLATE_9002]فقط سرت رو بنداز پایین و طبق نقشه پیش برو، باشه؟[/TRANSLATE_9002]
 
 [نمونه ۲: لحن رسمی، علمی و مستند - Formal, Documentary & Technical]
 ورودی:
 [CONTEXT]The observatory recorded an unprecedented pulse in deep space.[/CONTEXT]
-[TRANSLATE_21]The artificial intelligence model optimizes neural network weights through gradient descent.[/TRANSLATE_21]
-[TRANSLATE_22]Dr. Reynolds published the comparative findings in the international journal.[/TRANSLATE_22]
+[TRANSLATE_9003]The artificial intelligence model optimizes neural network weights through gradient descent.[/TRANSLATE_9003]
+[TRANSLATE_9004]Dr. Reynolds published the comparative findings in the international journal.[/TRANSLATE_9004]
 خروجی:
-[TRANSLATE_21]مدل هوش مصنوعی از طریق گرادیان نزولی، وزن‌های شبکه عصبی را بهینه‌سازی می‌کند.[/TRANSLATE_21]
-[TRANSLATE_22]دکتر رینولدز نتایج یافته‌های مقایسه‌ای را در نشریه بین‌المللی منتشر کرد.[/TRANSLATE_22]
-
-[نمونه ۳: اصطلاحات عامیانه، ضرب‌المثل و ریتم سریع کمدی/اکشن - Slang & Idiomatic Dialogue]
-ورودی:
-[TRANSLATE_35]Don't give me that look, buddy. You're barking up the wrong tree.[/TRANSLATE_35]
-[TRANSLATE_36]I swear I have no clue what you're even talking about.[/TRANSLATE_36]
-خروجی:
-[TRANSLATE_35]این‌طوری نگام نکن رفیق. داری اشتباه می‌زنی![/TRANSLATE_35]
-[TRANSLATE_36]به خدا قسم روحم هم از چیزی که می‌گی خبر نداره.[/TRANSLATE_36]`;
+[TRANSLATE_9003]مدل هوش مصنوعی از طریق گرادیان نزولی، وزن‌های شبکه عصبی را بهینه‌سازی می‌کند.[/TRANSLATE_9003]
+[TRANSLATE_9004]دکتر رینولدز نتایج یافته‌های مقایسه‌ای را در نشریه بین‌المللی منتشر کرد.[/TRANSLATE_9004]`;
 
 /**
  * Generates tone-specific guidelines for subtitle writing.
@@ -106,14 +98,18 @@ Your mission: Translate dialogue lines into punchy, native-sounding, cinema-grad
   const contract = isPersian
     ? `--- قرارداد قطعی و تخلف‌ناپذیر خروجی (CRITICAL RESPONSE CONTRACT) ---
 ۱. خروجی شما باید فقط و فقط شامل تگ‌های شماره‌دار [TRANSLATE_X]...[/TRANSLATE_X] باشد.
-۲. تعداد تگ‌های بازگشتی باید دقیقاً با تعداد تگ‌های درخواستی برابر باشد. هیچ تگی را حذف، ادغام، جابه‌جا یا بازشماری نکنید.
-۳. شناسه هر تگ (عدد X) باید دقیقاً همان شماره درخواست‌شده باشد (تطابق کامل شناسه تگ با مبدا).
-۴. از نوشتن هرگونه متن اضافی، مقدمه (مانند «Sure, here is the translation»)، توضیحات پایانی، کد یا بلوک مارک‌داون (\`\`\`) اکیداً خودداری کنید. پاسخ مستقیماً با اولین تگ باز شونده آغاز شود.`
+۲. تعداد تگ‌های بازگشتی باید دقیقاً با تعداد تگ‌های درخواستی برابر باشد. هیچ تگی را حذف، ادغام، جابه‌جا یا بازشماری نکنید (یک تگ به ازای هر خط ورودی).
+۳. شناسه هر تگ (عدد X) باید دقیقاً همان شماره درخواست‌شده باشد.
+۴. تگ‌ها دقیقاً با براکت مربع بسته می‌شوند: [/TRANSLATE_X]. هرگز تگ را با علامت «>» نبندید (نوشتن [/TRANSLATE_X> یا [TRANSLATE_X> اکیداً ممنوع است).
+۵. از نوشتن هرگونه تگ، برچسب یا شناسه در داخل متن ترجمه خودداری کنید.
+۶. از نوشتن هرگونه متن اضافی، مقدمه، توضیحات پایانی، کد یا بلوک مارک‌داون (\`\`\`) اکیداً خودداری کنید. پاسخ مستقیماً با اولین تگ باز شونده آغاز شود.`
     : `--- STRICT RESPONSE CONTRACT ---
 1. Return ONLY the requested [TRANSLATE_X]...[/TRANSLATE_X] tags.
 2. The count of tags in the response must match the input count exactly. Never drop, merge, or omit tags.
 3. Keep the exact marker IDs ([TRANSLATE_X]).
-4. Do NOT output any preamble, markdown code fences, notes, or explanations. Start immediately with the first tag.`;
+4. Strictly close tags with square brackets: [/TRANSLATE_X]. NEVER close with ">" (e.g. [/TRANSLATE_X> is strictly forbidden).
+5. Never include any tag markers inside the dialogue translation itself.
+6. Do NOT output any preamble, markdown code fences, notes, or explanations. Start immediately with the first tag.`;
 
   let customPromptBlock = '';
   if (settings.customPrompt && settings.customPrompt.trim()) {
@@ -170,11 +166,12 @@ Lines in [CONTEXT]...[/CONTEXT] are reference only; do not translate or include 
 CRITICAL CONSTRAINTS:
 1. Return EXACTLY ${count} translated tags.
 2. ${markerRequirement}
-3. Maintain exact format: [TRANSLATE_X]translated text[/TRANSLATE_X]
-4. Do NOT combine lines; one tag per line.
-5. Dialogue must sound native, dynamic, and emotionally alive in ${language}, with proper subtitle pacing.
-6. If a line includes leading timing cues like {00:00:01,000 --> 00:00:03,000}, do not include them in the translation; use them only to calibrate reading duration.
-7. Return NO commentary, explanations, or markdown code fences.
+3. Maintain exact format: [TRANSLATE_X]translated text[/TRANSLATE_X] (Strictly close with square bracket "]", NEVER with ">").
+4. Do NOT combine or merge lines; strictly return one tag per requested line.
+5. Do NOT include tag names or markers inside the translated text.
+6. Dialogue must sound native, dynamic, and emotionally alive in ${language}, with proper subtitle pacing.
+7. If a line includes leading timing cues like {00:00:01,000 --> 00:00:03,000}, do not include them in the translation; use them only to calibrate reading duration.
+8. Return NO commentary, explanations, or markdown code fences.
 
 --- INPUT PAYLOAD ---
 ${content}`;

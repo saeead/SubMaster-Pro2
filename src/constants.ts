@@ -614,30 +614,31 @@ Return ONLY the requested [TRANSLATE_X]...[/TRANSLATE_X] tags. Do NOT return JSO
     contractAndExamples = isPersian
       ? `--- قرارداد خروجی و نمونه‌های استاندارد SUBTITLE TRANSLATOR ---
 ۱. خروجی شما باید فقط و فقط شامل تگ‌های شماره‌دار [TRANSLATE_X]...[/TRANSLATE_X] باشد.
-۲. تعداد تگ‌های بازگشتی باید دقیقاً با تعداد تگ‌های درخواستی برابر باشد. هیچ تگی را حذف، ادغام، جابه‌جا یا بازشماری نکنید.
-۳. ترجمه دیالوگ‌ها باید به فارسی اصیل، زنده، پرکشش و متناسب با دوبله و زیرنویس حرفه‌ای سینمایی باشد؛ از ترجمه تحت‌اللفظی و ماشینی اکیداً خودداری فرمایید.
-۴. رعایت نیم‌فاصله واقعی (U+200C) در افعال مضارع و ماضی استمراری (می‌روم، نمی‌دانم)، پسوندها (کتاب‌ها) و ترکیبات الزامی است.
+۲. تعداد تگ‌های بازگشتی باید دقیقاً با تعداد تگ‌های درخواستی برابر باشد. هیچ تگی را حذف، ادغام، جابه‌جا یا بازشماری نکنید (یک تگ به ازای هر خط).
+۳. تگ‌ها دقیقاً با براکت مربع بسته می‌شوند: [/TRANSLATE_X]. هرگز تگ را با علامت «>» نبندید (مانند [/TRANSLATE_X>).
+۴. ترجمه دیالوگ‌ها باید به فارسی اصیل، زنده، پرکشش و متناسب با دوبله و زیرنویس حرفه‌ای سینمایی باشد؛ از ترجمه تحت‌اللفظی و ماشینی اکیداً خودداری فرمایید.
+۵. رعایت نیم‌فاصله واقعی (U+200C) در افعال مضارع و ماضی استمراری (می‌روم، نمی‌دانم)، پسوندها (کتاب‌ها) و ترکیبات الزامی است.
 
 --- نمونه‌های استاندارد تگ‌ها (Few-Shot Examples) ---
 ورودی:
 [CONTEXT]We have been tracking them since midnight.[/CONTEXT]
-[TRANSLATE_10]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_10]
-[TRANSLATE_11]Just calm down and stick to the plan, alright?[/TRANSLATE_11]
+[TRANSLATE_9001]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_9001]
+[TRANSLATE_9002]Just calm down and stick to the plan, alright?[/TRANSLATE_9002]
 خروجی:
-[TRANSLATE_10]مگه عقلت رو از دست دادی؟ الان اصلاً نمی‌تونیم از پسش بربیایم![/TRANSLATE_10]
-[TRANSLATE_11]فقط آروم باش و طبق نقشه پیش برو، باشه؟[/TRANSLATE_11]
+[TRANSLATE_9001]مگه عقلت رو از دست دادی؟ الان اصلاً نمی‌تونیم از پسش بربیایم![/TRANSLATE_9001]
+[TRANSLATE_9002]فقط آروم باش و طبق نقشه پیش برو، باشه؟[/TRANSLATE_9002]
 
 ورودی:
-[TRANSLATE_21]The artificial intelligence model optimizes neural network weights through gradient descent.[/TRANSLATE_21]
+[TRANSLATE_9003]The artificial intelligence model optimizes neural network weights through gradient descent.[/TRANSLATE_9003]
 خروجی:
-[TRANSLATE_21]مدل هوش مصنوعی از طریق گرادیان نزولی، وزن‌های شبکه عصبی را بهینه‌سازی می‌کند.[/TRANSLATE_21]`
+[TRANSLATE_9003]مدل هوش مصنوعی از طریق گرادیان نزولی، وزن‌های شبکه عصبی را بهینه‌سازی می‌کند.[/TRANSLATE_9003]`
       : `--- SUBTITLE TRANSLATOR CONTRACT & FEW-SHOT EXAMPLES ---
-Return ONLY the requested [TRANSLATE_X]...[/TRANSLATE_X] tags with identical marker IDs and counts.
+Return ONLY the requested [TRANSLATE_X]...[/TRANSLATE_X] tags with identical marker IDs and counts. Strictly close tags with square brackets (never ">").
 Example:
 Input:
-[TRANSLATE_1]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_1]
+[TRANSLATE_9001]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_9001]
 Output:
-[TRANSLATE_1]Are you out of your mind? We can't pull this off right now![/TRANSLATE_1]`;
+[TRANSLATE_9001]Are you out of your mind? We can't pull this off right now![/TRANSLATE_9001]`;
   } else {
     // Default or paragraph methods: Strict JSON array with few-shot examples
     contractAndExamples = isPersian

@@ -22,17 +22,21 @@ export const normalizeForAlignment = (value: string): string => {
 export const cleanTranslatedSlot = (value: string): string => {
   if (!value) return '';
   return value
-    // Remove any remaining opening or closing tags
-    .replace(/\[\/?(?:TRANSLATE(?:[_\s:-]*\d+)?|TRANSLTranslate_\d+|CONTEXT)\]/gi, '')
-    // Remove markdown bolding or backticks around content
+    // 1. Strip any opening/closing/broken translate or context tags
+    // Supports square brackets [ ], angle brackets < >, and malformed tag combinations like [TRANSLATE_6> or [/TRANSLATE_6>
+    .replace(/[\[<]\/?(?:TRANSLATE(?:[_\s:-]*\d+)?|TRANSLTranslate_\d+|CONTEXT)[\]>]/gi, '')
+    // 2. Strip dangling tag fragments at the start or end of text
+    .replace(/[\[<]\/?(?:TRANSLATE|CONTEXT)[_\s:-]*\d*.*$/gim, '')
+    .replace(/^[\[<]\/?(?:TRANSLATE|CONTEXT)[_\s:-]*\d*[\]>:\s-]*/gim, '')
+    // 3. Remove markdown bolding or backticks around content
     .replace(/^\s*[`*]+|[`*]+\s*$/g, '')
-    // Strip echoed timestamp headers (e.g., {00:01:23,456 --> 00:01:25,789})
+    // 4. Strip echoed timestamp headers (e.g., {00:01:23,456 --> 00:01:25,789})
     .replace(/^\s*[\[({«"']*\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*(?:--?>|<--|←|→)\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*[\])}»"']*\s*/g, '')
-    // Strip outer enclosing brackets or quotes if the model wrapped the entire sentence
+    // 5. Strip outer enclosing brackets or quotes if the model wrapped the entire sentence
     .replace(/^\s*[«"']+|[»"']+\s*$/g, '')
-    // Strip invisible zero-width formatting characters (keep \u200C)
+    // 6. Strip invisible zero-width formatting characters (keep \u200C)
     .replace(invisibleChars, '')
-    // Convert escaped linebreaks to spaces (subtitles are one single flowing string per cue)
+    // 7. Convert escaped linebreaks to spaces (subtitles are one single flowing string per cue)
     .replace(/\\[nNr]/g, ' ')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -64,8 +68,8 @@ export const extractSubtitleTranslatorLinesByMarkerIds = (
   const idToSlot = new Map(expectedMarkerIds.map((id, index) => [id, index]));
   const slots = Array<string>(expectedMarkerIds.length).fill('');
 
-  // Tier 1: Exact matching [TRANSLATE_X]...[/TRANSLATE_X] or [TRANSLATE_X]...[/TRANSLATE]
-  const tier1Pattern = /\[TRANSLATE[_\s:-]+(\d+)\]([\s\S]*?)\[\/(?:TRANSLATE[_\s:-]*\1|TRANSLATE)\]/gi;
+  // Tier 1: Flexible matching [TRANSLATE_X]...[/TRANSLATE_X] supporting both ] and > endings
+  const tier1Pattern = /[\[<]TRANSLATE[_\s:-]+(\d+)[\]>]([\s\S]*?)[\[<]\/(?:TRANSLATE[_\s:-]*\1|TRANSLATE)[\]>]/gi;
   let match: RegExpExecArray | null;
   while ((match = tier1Pattern.exec(sanitized))) {
     const id = Number(match[1]);
@@ -77,12 +81,12 @@ export const extractSubtitleTranslatorLinesByMarkerIds = (
 
   // Tier 2: Unclosed tags lookahead (when model omits closing tag before starting the next tag)
   if (slots.some(val => val === '')) {
-    const tier2Pattern = /\[TRANSLATE[_\s:-]+(\d+)\]([\s\S]*?)(?=\[TRANSLATE[_\s:-]+\d+\]|$)/gi;
+    const tier2Pattern = /[\[<]TRANSLATE[_\s:-]+(\d+)[\]>]([\s\S]*?)(?=[\[<]TRANSLATE[_\s:-]+\d+[\]>]|$)/gi;
     while ((match = tier2Pattern.exec(sanitized))) {
       const id = Number(match[1]);
       const slot = idToSlot.get(id);
       if (slot !== undefined && slots[slot] === '') {
-        const rawContent = match[2].replace(/\[\/TRANSLATE.*?\]/gi, '');
+        const rawContent = match[2].replace(/[\[<]\/?TRANSLATE.*?[\]>]?/gi, '');
         slots[slot] = cleanTranslatedSlot(rawContent);
       }
     }
@@ -93,7 +97,7 @@ export const extractSubtitleTranslatorLinesByMarkerIds = (
     const zeroBasedIds = Array.from({ length: expectedMarkerIds.length }, (_, index) => index);
     const zeroIdToSlot = new Map(zeroBasedIds.map((id, index) => [id, index]));
     const zeroSlots = Array<string>(expectedMarkerIds.length).fill('');
-    const zeroPattern = /\[TRANSLATE[_\s:-]+(\d+)\]([\s\S]*?)\[\/(?:TRANSLATE[_\s:-]*\1|TRANSLATE)\]/gi;
+    const zeroPattern = /[\[<]TRANSLATE[_\s:-]+(\d+)[\]>]([\s\S]*?)[\[<]\/(?:TRANSLATE[_\s:-]*\1|TRANSLATE)[\]>]/gi;
     while ((match = zeroPattern.exec(sanitized))) {
       const id = Number(match[1]);
       const slot = zeroIdToSlot.get(id);
