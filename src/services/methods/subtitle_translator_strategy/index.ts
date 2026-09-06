@@ -117,104 +117,29 @@ export const buildContextPayload = (lines: string[], start: number, end: number,
     .join('\n');
 };
 
+export {
+  normalizeSubtitleTranslatorPersianHalfSpaces,
+  normalizePersianChars,
+  cleanHalfSpaceArtifacts,
+  PERSIAN_HALF_SPACE
+} from './orthography';
+
+export {
+  SUBTITLE_TRANSLATOR_PERSIAN_ORTHOGRAPHY_INSTRUCTION,
+  SUBTITLE_TRANSLATOR_FEW_SHOT_EXAMPLES,
+  getSubtitleTranslatorToneInstruction,
+  getSubtitleTranslatorSystemInstruction,
+  buildSubtitleTranslatorUserPrompt
+} from './prompts';
+
+export {
+  cleanTranslatedSlot,
+  extractSubtitleTranslatorLinesByMarkerIds,
+  extractSubtitleTranslatorLinesByMarkerIds as extractTranslatedLinesByMarkerIds,
+  extractTranslatedLinesWithNumbers
+} from './parser';
+
 export const SUBTITLE_TRANSLATOR_SYSTEM_PROMPT = 'You are a professional subtitle translator. Respond only with the tagged lines. Do not add explanations, comments, markdown fences, or any extra text.';
-
-/** Persian-only writing rules for Subtitle Translator Strategy model responses. */
-export const SUBTITLE_TRANSLATOR_PERSIAN_ORTHOGRAPHY_INSTRUCTION = `For Persian output, apply the Persian Academy's orthography consistently:
-- Use the exact zero-width non-joiner character (U+200C), never a regular space, hyphen, or tatweel, in required compounds and affixes: می‌رود، نمی‌دانم، کتاب‌ها، نوشته‌ام، بزرگ‌تر، بهینه‌سازی، و فارسی‌زبان.
-- Do not remove an existing required U+200C or attach words without it; write neither «می رود» nor «بهینهتر».
-- Use standard Persian punctuation: no space before «،»، «؛»، «؟»، «!» or «.»; use one ordinary space after punctuation when another word follows.
-- Use Persian ی and ک, apply the correct میانجیِ ی in اضافه constructions when needed, and avoid extra or missing spaces.
-- Preserve these rules in every tagged line while keeping the subtitle concise and natural.`;
-
-/**
- * Repairs common model substitutions for U+200C in Persian Subtitle Translator Strategy output.
- * This is intentionally limited to unambiguous prefixes, suffixes, and compounds
- * so a malformed response cannot reach the subtitle formatter with a regular
- * space, hyphen, or tatweel in place of a required half-space.
- */
-export const normalizeSubtitleTranslatorPersianHalfSpaces = (value: string): string => value
-  .replace(/ي/g, 'ی')
-  .replace(/ك/g, 'ک')
-  .replace(/ـ+/g, PERSIAN_HALF_SPACE)
-  .replace(/(می|نمی)(?:\s|\u200C)*(رود|دانم|دانی|داند|دانیم|دانید|دانند|شود|شوند|شوم|شویم|شوید|توانم|توانی|تواند|توانند|توانیم|توانید|کنم|کنی|کند|کنند|کنیم|کنید|باشم|باشی|باشد|باشند|باشیم|باشید)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
-  .replace(/(کتاب)(?:\s|-|ـ|\u200C)*(هایی|های|ها)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
-  .replace(/(بهینه|بزرگ|کوچک)(?:\s|-|ـ|\u200C)*(ترین|تر)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
-  .replace(/(برنامه|دست|کتاب|صفر|نیم|فارسی|بهینه)(?:\s|-|ـ|\u200C)*(نویس(?:ی)?|خانه|عرض|فاصله|زبان|سازی)/gu, `$1${PERSIAN_HALF_SPACE}$2`);
-const TARGET_LANGUAGE_NAMES: Record<string, string> = {
-  fa: 'Persian (Farsi)', en: 'English', ru: 'Russian', zh: 'Chinese', de: 'German', es: 'Spanish'
-};
-export const buildSubtitleTranslatorUserPrompt = (content: string, count: number, targetLanguage = 'fa', expectedMarkerIds?: number[]): string => {
-  const language = TARGET_LANGUAGE_NAMES[targetLanguage] || targetLanguage;
-  const markerRequirement = expectedMarkerIds?.length
-    ? `Translate exactly these marker IDs and no others: ${expectedMarkerIds.map(id => `TRANSLATE_${id}`).join(', ')}.`
-    : `Do NOT skip any numbers from 0 to ${count - 1}.`;
-  return `Context: You are acting as a professional subtitle translator using the Subtitle Translator structural-separation strategy. First read the whole marked passage as one coherent paragraph so you understand the topic, speaker intent, pronouns, references, emotional flow, timestamps, and the best natural word choices in ${language}. Then translate every marked line into ${language}. Only translate the lines marked with [TRANSLATE_X][/TRANSLATE_X] tags. Use [CONTEXT][/CONTEXT] lines only for understanding.\n\nCRITICAL REQUIREMENTS:\n1. You MUST translate ALL ${count} lines marked with [TRANSLATE_X] tags into ${language}; never return an empty tag and never leave a requested marker untranslated\n2. ${markerRequirement}\n3. Keep the exact same marker IDs in the exact format: [TRANSLATE_X]translation[/TRANSLATE_X]\n4. NEVER merge lines; retain one tag per source line.\n5. Preserve the complete meaning of every line, but keep each subtitle concise and balanced for its timestamp duration. Do not summarize, omit details, or move content between tags; also do not overfill one tag while leaving another too short or empty.\n6. Maintain seamless boundary continuity and grammar stitching with preceding [CONTEXT] lines: if the first [TRANSLATE_X] line continues a clause or thought from an existing translation in [CONTEXT], match its verb tense, pronouns, and tone so the dialogue flows smoothly without breaks.\n7. If a source line includes a leading timestamp hint such as {00:00:01,000 --> 00:00:03,000}, use it only to fit subtitle length and context; do not include the timestamp hint in the translated text.\n8. Do not answer in English unless English is the selected target language.\n\n${content}`;
-};
-
-export const extractTranslatedLinesWithNumbers = (response: string, expectedCount: number, sourceLines: string[], contextLines: string[]): string[] => {
-  const expectedIds = Array.from({ length: expectedCount }, (_, index) => index);
-  if (expectedCount > 1 && !response.includes('[TRANSLATE_0]') && response.includes(`[TRANSLATE_${expectedCount}]`)) return Array(expectedCount).fill('');
-  if (expectedCount > 1 && /\[TRANSLATE_\d+\]\s*\[\/TRANSLATE_\d+\]/.test(response)) return Array(expectedCount).fill('');
-  return extractTranslatedLinesByMarkerIds(response, expectedIds, sourceLines, contextLines);
-};
-
-export const extractTranslatedLinesByMarkerIds = (response: string, expectedMarkerIds: number[], sourceLines: string[], contextLines: string[]): string[] => {
-  const readSlots = (markerIds: number[]): string[] => {
-    const slots = Array<string>(markerIds.length).fill('');
-    const idToSlot = new Map(markerIds.map((id, index) => [id, index]));
-    const pattern = /\[TRANSLATE_(\d+)\]([\s\S]*?)\[\/(?:TRANSLATE|TRANSLTranslate)_\1\]/g;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(response))) {
-      const slot = idToSlot.get(Number(match[1]));
-      if (slot !== undefined && slots[slot] === '') slots[slot] = cleanTranslatedSlot(match[2]);
-    }
-    return slots;
-  };
-
-  let output = readSlots(expectedMarkerIds);
-  // Some otherwise capable models renumber tags from zero despite being given
-  // subtitle IDs. Accept that unambiguous response without issuing more API
-  // calls; App maps the ordered slots back to the original subtitle IDs.
-  if (!output.some(Boolean) && !expectedMarkerIds.every((id, index) => id === index)) {
-    output = readSlots(Array.from({ length: expectedMarkerIds.length }, (_, index) => index));
-  }
-
-  // Older provider configurations may still follow the former JSON contract.
-  // Decode that response locally instead of silently replacing every cue with
-  // its source text. Tagged output remains the primary, documented protocol.
-  if (!output.some(Boolean)) {
-    try {
-      const start = response.indexOf('[');
-      const end = response.lastIndexOf(']');
-      const parsed = JSON.parse(start >= 0 && end > start ? response.slice(start, end + 1) : response) as unknown;
-      if (Array.isArray(parsed)) {
-        const byId = new Map<number, string>();
-        for (const item of parsed) {
-          if (!item || typeof item !== 'object') continue;
-          const id = Number((item as { id?: unknown }).id);
-          const text = (item as { translatedText?: unknown }).translatedText;
-          if (Number.isInteger(id) && typeof text === 'string' && !byId.has(id)) byId.set(id, cleanTranslatedSlot(text));
-        }
-        output = expectedMarkerIds.map((id, index) => byId.get(id) || byId.get(index) || '');
-      }
-    } catch {
-      // This was neither a tagged response nor valid JSON; existing fallback
-      // behavior keeps the original cue rather than corrupting the subtitle.
-    }
-  }
-
-  const seen = new Map<string, number>();
-  return output.map((value, index) => {
-    if (!value) return '';
-    const ownSource = normalizeForAlignment(sourceLines[index] || '');
-    if (contextLines.some(context => normalizeForAlignment(context) === value) && ownSource !== value) return '';
-    const duplicateSource = seen.get(value);
-    if (duplicateSource !== undefined && normalizeForAlignment(sourceLines[duplicateSource] || '') !== normalizeForAlignment(sourceLines[index] || '')) return '';
-    seen.set(value, index);
-    return value;
-  });
-};
 
 export interface SubtitleTranslatorRestoreOptions {
   bilingual?: boolean;

@@ -103,7 +103,10 @@ export class TranslationJobRunner {
             await this.handler(job, this.controller.signal);
             if (job.status === 'running') this.finish(job, 'completed');
           } catch (error: any) {
-            if (this.controller.signal.aborted) {
+            const isAbort = this.controller?.signal.aborted
+              || error?.name === 'AbortError'
+              || String(error?.message || error).toLowerCase().includes('aborted');
+            if (isAbort) {
               if (job.status === 'running') this.finish(job, 'cancelled');
             } else {
               job.error = error?.message || String(error);
@@ -133,7 +136,11 @@ export class TranslationJobRunner {
     this.activeJob.status = status;
     this.activeJob.completedAt = new Date().toISOString();
     this.emit(this.activeJob);
-    this.controller?.abort();
+    try {
+      this.controller?.abort(new DOMException(status === 'paused' ? 'Translation paused by user' : 'Translation cancelled by user', 'AbortError'));
+    } catch {
+      this.controller?.abort();
+    }
   }
 
   private finish(job: TranslationJob, status: TranslationJobStatus): void {

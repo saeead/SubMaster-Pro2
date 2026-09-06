@@ -3,6 +3,7 @@ import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@go
 import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic, GlossaryItem, AIProvider, GeminiFlashModelCache, DiscoveredGeminiModel } from "../types";
 import { APP_CONFIG, DEFAULT_GEMINI_MODEL, getResolvedGeminiModel, getSystemInstruction, getCoreSystemInstruction, getDynamicSystemInstruction, LANGUAGE_PROMPTS, GEMINI_CONTEXT_PRE_WINDOW, GEMINI_CONTEXT_POST_WINDOW, getGeminiTemperature, GEMINI_FLASH_DISCOVERY_CACHE_KEY, GEMINI_FLASH_DISCOVERY_CACHE_TTL_MS, MAX_MODEL_FALLBACK_SWITCHES, DEFAULT_FLASH_FALLBACK_CHAIN, getCachedGeminiFlashModels, getGeminiFallbackChain } from "../constants";
 import { SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION } from "./methods/skeleton_str";
+import { getSubtitleTranslatorSystemInstruction } from "./methods/subtitle_translator_strategy";
 import { filterBatchWithMemory, addBatchToMemory } from "./translationMemory";
 import { getStandardLimits, checkCueStandardCompliance, SubtitleComplianceIssue } from "./subtitleUtils";
 
@@ -77,6 +78,17 @@ export const notifyModelFallback = (fromModel: string, toModel: string, reason: 
 };
 
 export const getLastModelFallbackInfo = () => lastFallbackTracking;
+
+/**
+ * Checks if an error or signal represents an intentional abort/cancellation operation.
+ */
+export const isAbortError = (error: any, signal?: AbortSignal): boolean => {
+  if (signal?.aborted) return true;
+  if (!error) return false;
+  if (error.name === 'AbortError') return true;
+  const msg = String(error.message || error.details || error).toLowerCase();
+  return msg.includes('aborted') || msg.includes('abort') || msg.includes('canceled') || msg.includes('cancelled');
+};
 
 /**
  * Dynamically queries Google Gemini API models endpoint to discover the latest available Flash models.
@@ -772,12 +784,24 @@ const callLmStudioChat = async (settings: AppSettings, systemInstruction: string
   // If settings.temperature is provided, use it as baseline, but adapt slightly by tone
   // (slightly higher for movie/conversational natural flow, slightly lower for news/educational precision)
   let lmTemp = typeof settings.temperature === 'number' ? settings.temperature : 0.35;
-  if (settings.tone === 'movie' || settings.tone === 'conversational') {
-    lmTemp = Math.min(1.0, lmTemp + 0.05);
-  } else if (settings.tone === 'news' || settings.tone === 'formal') {
-    lmTemp = Math.max(0.1, lmTemp - 0.05);
+  if (settings.translationMethod === 'subtitle_translator') {
+    // For Subtitle Translator method with Gemma 4 in LM Studio:
+    // Tightly calibrated baseline (0.30) to prevent dropping tags or wandering while preserving conversational naturalness
+    let subTemp = typeof settings.temperature === 'number' ? settings.temperature : 0.30;
+    if (settings.tone === 'movie' || settings.tone === 'conversational') {
+      subTemp = Math.min(0.85, subTemp + 0.04);
+    } else if (settings.tone === 'news' || settings.tone === 'formal') {
+      subTemp = Math.max(0.15, subTemp - 0.05);
+    }
+    lmTemp = Math.round(subTemp * 100) / 100;
+  } else {
+    if (settings.tone === 'movie' || settings.tone === 'conversational') {
+      lmTemp = Math.min(1.0, lmTemp + 0.05);
+    } else if (settings.tone === 'news' || settings.tone === 'formal') {
+      lmTemp = Math.max(0.1, lmTemp - 0.05);
+    }
+    lmTemp = Math.round(lmTemp * 100) / 100;
   }
-  lmTemp = Math.round(lmTemp * 100) / 100;
 
   // 2. Sampling parameters suitable for Gemma 4 (26B A4B) with optional settings overrides
   const anySettings = settings as any;
@@ -785,7 +809,7 @@ const callLmStudioChat = async (settings: AppSettings, systemInstruction: string
   const top_k = typeof anySettings?.lmStudioTopK === 'number' ? anySettings.lmStudioTopK : 64;
   const repeat_penalty = typeof anySettings?.lmStudioRepeatPenalty === 'number' 
     ? anySettings.lmStudioRepeatPenalty 
-    : (typeof anySettings?.repeat_penalty === 'number' ? anySettings.repeat_penalty : 1.08);
+    : (typeof anySettings?.repeat_penalty === 'number' ? anySettings.repeat_penalty : (settings.translationMethod === 'subtitle_translator' ? 1.10 : 1.08));
 
   // 3. Batch-proportional max_tokens (estimating prompt density and expected target batch size)
   let maxTokens = 2048;
@@ -1636,7 +1660,7 @@ STRICT JSON OUTPUT MANDATE:
       return validatedResponses;
 
     } catch (error: any) {
-      if (signal?.aborted || error?.name === 'AbortError') throw error;
+      if (isAbortError(error, signal)) throw error;
       const errorMessage = extractErrorDetails(error);
       if (settings.aiProvider === 'lm_studio' && (errorMessage.includes('fetch failed') || errorMessage.includes('failed to fetch') || errorMessage.includes('lm studio'))) {
         throw new Error('⚠️ اتصال به LM Studio برقرار نشد. Local Server را در LM Studio روشن کنید و آدرس/نام مدل را بررسی کنید.');
@@ -1897,7 +1921,7 @@ STRICT JSON OUTPUT MANDATE:
       if (!response.text) throw new Error("Empty selected retranslation response from Gemini");
       return validateBatchResponse(targetIds, JSON.parse(extractJsonArray(response.text)));
     } catch (error: any) {
-      if (error?.name === 'AbortError') throw error;
+      if (isAbortError(error, signal)) throw error;
       const errorMessage = extractErrorDetails(error);
       if (settings.aiProvider === 'lm_studio' && (errorMessage.includes('fetch failed') || errorMessage.includes('failed to fetch') || errorMessage.includes('lm studio'))) {
         throw new Error('⚠️ اتصال به LM Studio برقرار نشد. Local Server را در LM Studio روشن کنید و آدرس/نام مدل را بررسی کنید.');
@@ -1980,23 +2004,29 @@ export const translateFreeText = async (text: string, settings: AppSettings, tar
 
 /** Dedicated raw tagged call used only by the opt-in Skeleton STR method. */
 export const translateSkeletonPayload = async (content: string, settings: AppSettings, signal?: AbortSignal): Promise<string> => {
-  // Reuse the app-wide tone, topic, glossary, protected terms, custom prompt and
-  // output-standard rules, then override only the wire format for Skeleton STR.
-  const styleInstruction = getSystemInstruction(
-    settings.tone,
-    settings.topic,
-    settings.customPrompt,
-    settings.outputStandard,
-    settings.glossary,
-    settings.doNotTranslateTerms,
-    settings.targetLanguage,
-    settings.translationMethod === 'subtitle_translator' ? 'subtitle_translator' : 'skeleton_str',
-    settings.aiProvider
-  );
+  const isSubtitleTranslator = settings.translationMethod === 'subtitle_translator';
+  let systemInstruction: string;
+  if (isSubtitleTranslator) {
+    systemInstruction = getSubtitleTranslatorSystemInstruction(settings, settings.targetLanguage);
+  } else {
+    // Reuse the app-wide tone, topic, glossary, protected terms, custom prompt and
+    // output-standard rules, then override only the wire format for Skeleton STR.
+    const styleInstruction = getSystemInstruction(
+      settings.tone,
+      settings.topic,
+      settings.customPrompt,
+      settings.outputStandard,
+      settings.glossary,
+      settings.doNotTranslateTerms,
+      settings.targetLanguage,
+      'skeleton_str',
+      settings.aiProvider
+    );
   const persianOrthographyInstruction = settings.targetLanguage === 'fa'
     ? '\nFor Persian output, preserve and use the real zero-width non-joiner (U+200C) wherever Persian orthography requires it. Write, for example, می‌رود, نمی‌دانم, کتاب‌ها, بهینه‌تر, and برنامه‌نویسی; never replace the half-space with a normal space, hyphen, tatweel, or nothing.'
     : '';
-  const systemInstruction = `${styleInstruction}\n\n--- ${settings.translationMethod === 'subtitle_translator' ? 'Subtitle Translator' : 'Skeleton STR'} response contract ---\nTranslate into the configured target language with natural, human, professional subtitle writing. Preserve meaning, context, tone and speaker intent; avoid literal/word-for-word or machine-like phrasing.${persianOrthographyInstruction}\nReturn ONLY the numbered [TRANSLATE_X]...[/TRANSLATE_X] tags requested by the user. Do not return JSON, explanations, markdown, or any extra text.`;
+    systemInstruction = `${styleInstruction}\n\n--- Skeleton STR response contract ---\nTranslate into the configured target language with natural, human, professional subtitle writing. Preserve meaning, context, tone and speaker intent; avoid literal/word-for-word or machine-like phrasing.${persianOrthographyInstruction}\nReturn ONLY the numbered [TRANSLATE_X]...[/TRANSLATE_X] tags requested by the user. Do not return JSON, explanations, markdown, or any extra text.`;
+  }
   if (isFreeProvider(settings.aiProvider)) return translateTaggedPayloadWithFreeProvider(content, settings, signal);
   if (settings.aiProvider === 'lm_studio') return callLmStudioChat(settings, systemInstruction, content, signal);
   if (settings.aiProvider === 'openai_compatible') return callOpenAICompatibleChat(getActiveOpenAICompatibleService(settings), settings.temperature, systemInstruction, content, signal);

@@ -604,12 +604,40 @@ ${terms.map(t => `"${t}"`).join(', ')}`;
 
   // Contract & Output Format:
   let contractAndExamples = '';
-  if (method === 'skeleton_str' || method === 'subtitle_translator') {
+  if (method === 'skeleton_str') {
     contractAndExamples = isPersian
       ? `--- قرارداد خروجی تگ‌ها ---
 دقیقاً تگ‌های شماره‌دار [TRANSLATE_X]...[/TRANSLATE_X] درخواستی را بازگردانید. از تولید JSON، توضیحات یا مارک‌داون خودداری کنید.`
       : `--- TAG OUTPUT CONTRACT ---
 Return ONLY the requested [TRANSLATE_X]...[/TRANSLATE_X] tags. Do NOT return JSON, explanations, or markdown.`;
+  } else if (method === 'subtitle_translator') {
+    contractAndExamples = isPersian
+      ? `--- قرارداد خروجی و نمونه‌های استاندارد SUBTITLE TRANSLATOR ---
+۱. خروجی شما باید فقط و فقط شامل تگ‌های شماره‌دار [TRANSLATE_X]...[/TRANSLATE_X] باشد.
+۲. تعداد تگ‌های بازگشتی باید دقیقاً با تعداد تگ‌های درخواستی برابر باشد. هیچ تگی را حذف، ادغام، جابه‌جا یا بازشماری نکنید.
+۳. ترجمه دیالوگ‌ها باید به فارسی اصیل، زنده، پرکشش و متناسب با دوبله و زیرنویس حرفه‌ای سینمایی باشد؛ از ترجمه تحت‌اللفظی و ماشینی اکیداً خودداری فرمایید.
+۴. رعایت نیم‌فاصله واقعی (U+200C) در افعال مضارع و ماضی استمراری (می‌روم، نمی‌دانم)، پسوندها (کتاب‌ها) و ترکیبات الزامی است.
+
+--- نمونه‌های استاندارد تگ‌ها (Few-Shot Examples) ---
+ورودی:
+[CONTEXT]We have been tracking them since midnight.[/CONTEXT]
+[TRANSLATE_10]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_10]
+[TRANSLATE_11]Just calm down and stick to the plan, alright?[/TRANSLATE_11]
+خروجی:
+[TRANSLATE_10]مگه عقلت رو از دست دادی؟ الان اصلاً نمی‌تونیم از پسش بربیایم![/TRANSLATE_10]
+[TRANSLATE_11]فقط آروم باش و طبق نقشه پیش برو، باشه؟[/TRANSLATE_11]
+
+ورودی:
+[TRANSLATE_21]The artificial intelligence model optimizes neural network weights through gradient descent.[/TRANSLATE_21]
+خروجی:
+[TRANSLATE_21]مدل هوش مصنوعی از طریق گرادیان نزولی، وزن‌های شبکه عصبی را بهینه‌سازی می‌کند.[/TRANSLATE_21]`
+      : `--- SUBTITLE TRANSLATOR CONTRACT & FEW-SHOT EXAMPLES ---
+Return ONLY the requested [TRANSLATE_X]...[/TRANSLATE_X] tags with identical marker IDs and counts.
+Example:
+Input:
+[TRANSLATE_1]Are you out of your mind? We cannot pull this off right now![/TRANSLATE_1]
+Output:
+[TRANSLATE_1]Are you out of your mind? We can't pull this off right now![/TRANSLATE_1]`;
   } else {
     // Default or paragraph methods: Strict JSON array with few-shot examples
     contractAndExamples = isPersian
@@ -706,8 +734,8 @@ Read surrounding cues only to resolve ambiguity and maintain flow across cuts. T
 Context cues are read-only anchors. Translate every requested tagged line ([TRANSLATE_X]) and return only the requested tagged lines without altering numbering or surrounding skeleton structure.`;
   }
   if (method === 'subtitle_translator') {
-    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT (rockbenben/subtitle-translator style) ---
-Translate dialogue lines inside the requested [TRANSLATE_X] tags into professionally written native subtitles. Retain meaning, timing constraints, and register without modifying the outer structure.`;
+    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT (Master Subtitle Localization) ---
+Translate dialogue lines inside the requested [TRANSLATE_X] tags into natural, cinema-grade subtitles with authentic speech cadence, character personality, and dialogue rhythm. Strictly preserve all tag IDs and tag counts. Never output preambles, extra text, or markdown.`;
   }
   return `--- STANDARD BATCH METHOD CONTRACT ---
 Translate each JSON item with complete fidelity, returning exactly one native, un-summarized translation per requested item id.`;
