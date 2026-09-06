@@ -126,6 +126,9 @@ export const discoverAvailableGeminiFlashModels = async (apiKey: string): Promis
 
       if (!cleanName.includes('flash')) return false;
 
+      // Filter out deprecated model generations that return 404 for new users
+      if (cleanName.includes('2.5') || cleanName.includes('2.0') || cleanName.includes('1.5')) return false;
+
       if (excludedKeywords.some(kw => cleanName.includes(kw))) return false;
 
       return true;
@@ -1456,6 +1459,11 @@ STRICT JSON OUTPUT MANDATE:
         safetySettings: SAFETY_SETTINGS,
       };
 
+      // Disable heavy thinking/reasoning overhead on 3.8 and 3.7 flash models to avoid 503 high demand & latency
+      if (currentModelName.includes('3.8-flash') || currentModelName.includes('3.7-flash')) {
+        generateConfig.thinkingConfig = { thinkingBudget: 0 };
+      }
+
       let contents = userPrompt;
       if (cachedContentName) {
         generateConfig.cachedContent = cachedContentName;
@@ -1844,6 +1852,11 @@ STRICT JSON OUTPUT MANDATE:
         temperature: geminiTemp,
         safetySettings: SAFETY_SETTINGS,
       };
+
+      // Disable heavy thinking/reasoning overhead on 3.8 and 3.7 flash models to avoid 503 high demand & latency
+      if (currentModelName.includes('3.8-flash') || currentModelName.includes('3.7-flash')) {
+        generateConfig.thinkingConfig = { thinkingBudget: 0 };
+      }
 
       let contents = userPrompt;
       if (cachedContentName) {
