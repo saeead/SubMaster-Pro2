@@ -14,7 +14,7 @@ import { TextTranslatorModal } from './components/TextTranslatorModal';
 import { Toast, ToastType } from './components/Toast';
 import { SubtitleBlock, AppStatus, BatchRequest, BatchResponse, AppSettings, AdjustmentConfig, StyleConfig, GlossaryItem, SubtitleFile, Modification, TranslationDiagnostic } from './types';
 import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking } from './services/subtitleUtils';
-import { translateBatch, diagnoseConnection, retranslateSelectedBlocks, getTranslationDiagnostic, translateSkeletonPayload } from './services/geminiService';
+import { translateBatch, diagnoseConnection, retranslateSelectedBlocks, getTranslationDiagnostic, translateSkeletonPayload, ensureFreshGeminiFlashModels } from './services/geminiService';
 import { buildSkeletonUserPrompt, extractTranslatedLinesByMarkerIds, normalizeSkeletonPersianHalfSpaces } from './services/methods/skeleton_str';
 import { buildSubtitleTranslatorUserPrompt, extractTranslatedLinesByMarkerIds as extractSubtitleTranslatorLinesByMarkerIds, normalizeSubtitleTranslatorPersianHalfSpaces } from './services/methods/subtitle_translator_strategy';
 import { getFromMemory, addToMemory } from './services/translationMemory';
@@ -225,6 +225,31 @@ const App: React.FC = () => {
   const showDiagnosticToast = (diagnostic: TranslationDiagnostic) => {
     showToast(`${diagnostic.title}: ${diagnostic.recovery}`, diagnostic.severity === 'info' ? 'success' : diagnostic.severity);
   };
+
+  // Dynamic Gemini Flash Model Discovery on app startup
+  useEffect(() => {
+    const activeKey = settings.apiKeys.find(k => k.isValid && !k.isRateLimited)?.key || settings.apiKeys[0]?.key;
+    if (activeKey) {
+      ensureFreshGeminiFlashModels(activeKey).catch(err => {
+        console.warn('[App] Background Gemini model discovery notice:', err?.message || err);
+      });
+    }
+  }, [settings.apiKeys]);
+
+  // Model auto-fallback notification listener
+  useEffect(() => {
+    const handleModelFallbackEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ fromModel: string; toModel: string; message: string }>;
+      if (customEvent.detail?.message) {
+        showToast(customEvent.detail.message, 'warning');
+      }
+    };
+
+    window.addEventListener('submaster_model_fallback', handleModelFallbackEvent);
+    return () => {
+      window.removeEventListener('submaster_model_fallback', handleModelFallbackEvent);
+    };
+  }, []);
 
   // --- FILE MANAGEMENT ---
 

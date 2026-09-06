@@ -104,6 +104,21 @@ export type TargetLanguage = 'fa' | 'en' | 'ru' | 'zh' | 'de' | 'es';
 export type OutputStandard = 'normal' | 'netflix' | 'bbc' | 'broadcast';
 export type TranslationMethod = 'default' | 'paragraph' | 'skeleton_str' | 'subtitle_translator';
 
+export interface DiscoveredGeminiModel {
+  name: string;
+  displayName?: string;
+  description?: string;
+  version?: string;
+  supportedGenerationMethods?: string[];
+  inputTokenLimit?: number;
+  outputTokenLimit?: number;
+}
+
+export interface GeminiFlashModelCache {
+  models: string[];
+  timestamp: number;
+}
+
 export interface OpenAICompatibleService {
   id: string;
   name: string;

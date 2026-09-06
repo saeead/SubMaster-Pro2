@@ -1,5 +1,5 @@
 
-import { ToneType, TopicType, GlossaryItem, StyleTemplate, TargetLanguage, OutputStandard, TranslationMethod, AIProvider, ModelType } from "./types";
+import { ToneType, TopicType, GlossaryItem, StyleTemplate, TargetLanguage, OutputStandard, TranslationMethod, AIProvider, ModelType, GeminiFlashModelCache } from "./types";
 
 export const APP_CONFIG = {
   version: "3.0.0", // Dynamic Batch Queue & Real-time Auto-Pipeline Update
@@ -21,12 +21,91 @@ export const APP_CONFIG = {
   }
 };
 
+export const GEMINI_FLASH_DISCOVERY_CACHE_KEY = 'submaster_pro2_gemini_flash_models_v1';
+export const GEMINI_FLASH_DISCOVERY_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+export const MAX_MODEL_FALLBACK_SWITCHES = 3;
+
+export const DEFAULT_FLASH_FALLBACK_CHAIN: readonly string[] = [
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest'
+];
+
+export const getCachedGeminiFlashModels = (): string[] => {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return [...DEFAULT_FLASH_FALLBACK_CHAIN];
+  }
+  try {
+    const raw = window.localStorage.getItem(GEMINI_FLASH_DISCOVERY_CACHE_KEY);
+    if (!raw) return [...DEFAULT_FLASH_FALLBACK_CHAIN];
+    const parsed = JSON.parse(raw) as GeminiFlashModelCache;
+    if (parsed && Array.isArray(parsed.models) && parsed.models.length > 0) {
+      return parsed.models;
+    }
+  } catch {
+    // fallback
+  }
+  return [...DEFAULT_FLASH_FALLBACK_CHAIN];
+};
+
+export const getGeminiFallbackChain = (initialModel: string, blacklistedModels: string[] = []): string[] => {
+  const dynamicModels = getCachedGeminiFlashModels();
+  const candidates = [
+    initialModel,
+    ...dynamicModels,
+    ...DEFAULT_FLASH_FALLBACK_CHAIN,
+    APP_CONFIG.geminiModels.flash_lite,
+    APP_CONFIG.geminiModels.standard,
+    APP_CONFIG.geminiModels.flash,
+  ];
+
+  const seen = new Set<string>();
+  const chain: string[] = [];
+
+  for (const m of candidates) {
+    if (m && !seen.has(m) && !blacklistedModels.includes(m)) {
+      seen.add(m);
+      chain.push(m);
+    }
+  }
+
+  return chain.length > 0 ? chain : [APP_CONFIG.geminiModels.standard];
+};
+
 export const DEFAULT_GEMINI_MODEL = APP_CONFIG.geminiModels.standard;
 
 export const getResolvedGeminiModel = (modelType?: ModelType): string => {
   if (modelType === 'professional') return APP_CONFIG.geminiModels.professional;
-  if (modelType === 'flash') return APP_CONFIG.geminiModels.flash;
-  if (modelType === 'flash_lite') return APP_CONFIG.geminiModels.flash_lite;
+
+  const dynamicModels = getCachedGeminiFlashModels();
+
+  if (modelType === 'flash_lite') {
+    const liteModel = dynamicModels.find(m => m.includes('flash-lite') || m.includes('flashlite'));
+    if (liteModel) return liteModel;
+    return APP_CONFIG.geminiModels.flash_lite;
+  }
+
+  if (modelType === 'flash') {
+    const flashModel = dynamicModels.find(m => m === 'gemini-flash-latest' || (m.includes('flash') && !m.includes('lite')));
+    if (flashModel) return flashModel;
+    return APP_CONFIG.geminiModels.flash;
+  }
+
+  // standard / default
+  if (dynamicModels.length > 0) {
+    if (dynamicModels.includes(APP_CONFIG.geminiModels.standard)) {
+      return APP_CONFIG.geminiModels.standard;
+    }
+    return dynamicModels[0];
+  }
+
   return APP_CONFIG.geminiModels.standard;
 };
 

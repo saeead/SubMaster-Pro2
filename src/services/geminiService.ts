@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic, GlossaryItem, AIProvider } from "../types";
-import { APP_CONFIG, DEFAULT_GEMINI_MODEL, getResolvedGeminiModel, getSystemInstruction, getCoreSystemInstruction, getDynamicSystemInstruction, LANGUAGE_PROMPTS, GEMINI_CONTEXT_PRE_WINDOW, GEMINI_CONTEXT_POST_WINDOW, getGeminiTemperature } from "../constants";
+import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic, GlossaryItem, AIProvider, GeminiFlashModelCache, DiscoveredGeminiModel } from "../types";
+import { APP_CONFIG, DEFAULT_GEMINI_MODEL, getResolvedGeminiModel, getSystemInstruction, getCoreSystemInstruction, getDynamicSystemInstruction, LANGUAGE_PROMPTS, GEMINI_CONTEXT_PRE_WINDOW, GEMINI_CONTEXT_POST_WINDOW, getGeminiTemperature, GEMINI_FLASH_DISCOVERY_CACHE_KEY, GEMINI_FLASH_DISCOVERY_CACHE_TTL_MS, MAX_MODEL_FALLBACK_SWITCHES, DEFAULT_FLASH_FALLBACK_CHAIN, getCachedGeminiFlashModels, getGeminiFallbackChain } from "../constants";
 import { SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION } from "./methods/skeleton_str";
 import { filterBatchWithMemory, addBatchToMemory } from "./translationMemory";
 import { getStandardLimits, checkCueStandardCompliance, SubtitleComplianceIssue } from "./subtitleUtils";
@@ -13,6 +13,209 @@ interface GeminiCacheEntry {
 
 const geminiContextCacheMap = new Map<string, GeminiCacheEntry>();
 const geminiCacheUnsupportedKeys = new Set<string>();
+
+/**
+ * Session blacklist for models that return 503 / overloaded / UNAVAILABLE / high demand.
+ * This prevents the engine from repeatedly hitting congested models during the current user session.
+ */
+const sessionBlacklistedModels = new Set<string>();
+let lastFallbackTracking: { triedModels: string[]; lastSwitchedAt: number } | null = null;
+
+export const blacklistModelInSession = (modelName: string): void => {
+  sessionBlacklistedModels.add(modelName);
+  console.warn(`[Gemini Session Blacklist] Model "${modelName}" temporarily blacklisted for this session due to 503 / overload.`);
+};
+
+export const isModelBlacklistedInSession = (modelName: string): boolean => {
+  return sessionBlacklistedModels.has(modelName);
+};
+
+export const clearSessionBlacklistedModels = (): void => {
+  sessionBlacklistedModels.clear();
+  lastFallbackTracking = null;
+};
+
+export const getActiveGeminiFallbackChain = (initialModel: string): string[] => {
+  const chain = getGeminiFallbackChain(initialModel, Array.from(sessionBlacklistedModels));
+  return chain.length > 0 ? chain : getGeminiFallbackChain(initialModel, []);
+};
+
+export const isModelOverloadedError = (errMessage: string): boolean => {
+  const lower = (errMessage || '').toLowerCase();
+  return (
+    lower.includes('503') ||
+    lower.includes('overloaded') ||
+    lower.includes('unavailable') ||
+    lower.includes('high demand') ||
+    lower.includes('high_demand') ||
+    lower.includes('experiencing high demand') ||
+    lower.includes('service unavailable')
+  );
+};
+
+export const notifyModelFallback = (fromModel: string, toModel: string, reason: string, switchCount: number): void => {
+  if (!lastFallbackTracking) {
+    lastFallbackTracking = { triedModels: [fromModel], lastSwitchedAt: Date.now() };
+  }
+  if (!lastFallbackTracking.triedModels.includes(toModel)) {
+    lastFallbackTracking.triedModels.push(toModel);
+  }
+  lastFallbackTracking.lastSwitchedAt = Date.now();
+
+  const userMsg = `⚠️ مدل ${fromModel} با خطای ترافیک بالا (۵۰۳) روبرو شد. سوییچ خودکار به مدل پایدارتر ${toModel} (سوییچ ${switchCount} از ${MAX_MODEL_FALLBACK_SWITCHES})...`;
+  console.warn(`[Gemini Auto-Fallback] ${userMsg}`);
+
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(new CustomEvent('submaster_model_fallback', {
+        detail: { fromModel, toModel, reason, switchCount, message: userMsg }
+      }));
+    } catch {
+      // ignore
+    }
+  }
+};
+
+export const getLastModelFallbackInfo = () => lastFallbackTracking;
+
+/**
+ * Dynamically queries Google Gemini API models endpoint to discover the latest available Flash models.
+ * Filters for models supporting 'generateContent' and prioritizes lightweight 'flash-lite' and stable
+ * '*-flash' models over preview/experimental variants. Excludes pro, image, audio, tts, live, and robotics.
+ */
+export const discoverAvailableGeminiFlashModels = async (apiKey: string): Promise<string[]> => {
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+    return getCachedGeminiFlashModels();
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey.trim())}`;
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`[Gemini Discovery] Models endpoint returned status ${response.status}: ${response.statusText}`);
+      return getCachedGeminiFlashModels();
+    }
+
+    const data = await response.json();
+    const rawList: any[] = data.models || [];
+
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      console.warn('[Gemini Discovery] Empty or invalid models list returned.');
+      return getCachedGeminiFlashModels();
+    }
+
+    const excludedKeywords = ['pro', 'image', 'tts', 'live', 'embed', 'robotics', 'audio', 'omni', 'transcribe'];
+
+    const candidates = rawList.filter((m: any) => {
+      if (!m || typeof m.name !== 'string') return false;
+      const cleanName = m.name.replace(/^models\//, '').toLowerCase();
+
+      const methods: string[] = Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+      if (!methods.includes('generateContent')) return false;
+
+      if (!cleanName.includes('flash')) return false;
+
+      if (excludedKeywords.some(kw => cleanName.includes(kw))) return false;
+
+      return true;
+    }).map((m: any) => m.name.replace(/^models\//, ''));
+
+    if (candidates.length === 0) {
+      console.warn('[Gemini Discovery] No matching flash candidates after filtering.');
+      return getCachedGeminiFlashModels();
+    }
+
+    // Ranking algorithm:
+    // 1. flash-lite / flashlite models (fastest, lightweight, economic)
+    // 2. stable *-flash models (without preview, experimental, exp)
+    // 3. other flash models (preview / experimental)
+    const rankModel = (name: string): number => {
+      const lower = name.toLowerCase();
+      const isLite = lower.includes('flash-lite') || lower.includes('flashlite');
+      const isPreview = lower.includes('preview') || lower.includes('experimental') || lower.includes('exp');
+
+      const verMatch = lower.match(/(\d+(?:\.\d+)?)/);
+      const ver = verMatch ? parseFloat(verMatch[1]) : (lower.includes('latest') ? 99 : 0);
+
+      let base = 100;
+      if (isLite) {
+        base = isPreview ? 800 : 1000;
+      } else if (!isPreview) {
+        base = 500;
+      }
+      return base + ver;
+    };
+
+    candidates.sort((a, b) => rankModel(b) - rankModel(a));
+
+    const topModels = Array.from(new Set(candidates)).slice(0, 10);
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cachePayload: GeminiFlashModelCache = {
+          models: topModels,
+          timestamp: Date.now(),
+        };
+        window.localStorage.setItem(GEMINI_FLASH_DISCOVERY_CACHE_KEY, JSON.stringify(cachePayload));
+      } catch (storageErr) {
+        console.warn('[Gemini Discovery] Failed to cache models to localStorage:', storageErr);
+      }
+    }
+
+    console.info('[Gemini Discovery] Successfully discovered and cached top Flash models:', topModels);
+    return topModels;
+  } catch (error: any) {
+    console.warn('[Gemini Discovery] Error querying models endpoint:', error?.message || error);
+    return getCachedGeminiFlashModels();
+  }
+};
+
+/**
+ * Ensures fresh Gemini Flash models are available. If cache is expired (>6 hours)
+ * or missing, queries the discovery endpoint using the provided API key.
+ */
+export const ensureFreshGeminiFlashModels = async (apiKey?: string): Promise<string[]> => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = window.localStorage.getItem(GEMINI_FLASH_DISCOVERY_CACHE_KEY);
+      if (raw) {
+        const parsed: GeminiFlashModelCache = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.models) && parsed.models.length > 0) {
+          const age = Date.now() - (parsed.timestamp || 0);
+          if (age < GEMINI_FLASH_DISCOVERY_CACHE_TTL_MS) {
+            return parsed.models;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (apiKey && apiKey.trim().length > 0) {
+    try {
+      const discovered = await discoverAvailableGeminiFlashModels(apiKey);
+      if (discovered && discovered.length > 0) {
+        return discovered;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return getCachedGeminiFlashModels();
+};
 
 /**
  * Attempts to retrieve or establish a Gemini Context Cache for the invariant core system instruction.
@@ -936,13 +1139,16 @@ export const getTranslationDiagnostic = (error: any, settings: AppSettings, cont
     };
   }
 
-  if (msg.includes('503') || msg.includes('overloaded') || msg.includes('unavailable') || msg.includes('service unavailable')) {
+  if (isModelOverloadedError(msg)) {
+    const lastFallback = getLastModelFallbackInfo();
     return {
       code: 'model_overloaded',
       severity: 'warning',
-      title: 'مدل موقتاً شلوغ یا در دسترس نیست',
-      cause: `سرویس ${providerName} با خطای ازدحام یا عدم دسترسی موقت پاسخ داده است.`,
-      recovery: 'پروژه متوقف شده تا داده‌ها حفظ شوند. چند دقیقه صبر کنید، مدل سبک‌تر انتخاب کنید یا ادامه ترجمه را بزنید.',
+      title: 'مدل موقتاً شلوغ یا با ترافیک بالا مواجه است (۵۰۳)',
+      cause: lastFallback && lastFallback.triedModels.length > 1
+        ? `سرویس ${providerName} پس از تلاش خودکار با مدل‌های زنجیره Flash (${lastFallback.triedModels.join(' ➔ ')}) به دلیل ترافیک سنگین سرورهای گوگل با خطای ازدحام موقت روبرو شد.`
+        : `سرویس ${providerName} با خطای ازدحام، تقاضای بالا (high demand) یا عدم دسترسی موقت پاسخ داده است.`,
+      recovery: 'مدل‌های جایگزین Flash به صورت هوشمند بررسی شدند اما تمامی آنها موقتاً با ترافیک بالا مواجه‌اند. داده‌های ترجمه‌شده تا این لحظه کاملاً حفظ شده‌اند. چند دقیقه صبر کنید و دکمه ادامه ترجمه را بزنید یا مدل دیگری را در تنظیمات انتخاب کنید.',
       technicalDetails: details || msg,
       timestamp: new Date().toISOString()
     };
@@ -1114,7 +1320,21 @@ export const translateBatch = async (
     }
   }
 
-  const modelName = getResolvedGeminiModel(settings.model);
+  // Auto-refresh discovery cache in background if needed (only for Gemini)
+  if (settings.aiProvider === 'gemini' && settings.apiKeys && settings.apiKeys.length > 0) {
+    const activeKey = settings.apiKeys.find(k => k.isValid && !k.isRateLimited)?.key || settings.apiKeys[0]?.key;
+    if (activeKey) {
+      ensureFreshGeminiFlashModels(activeKey).catch(() => {});
+    }
+  }
+
+  const baseModel = getResolvedGeminiModel(settings.model);
+  const initialChain = settings.aiProvider === 'gemini'
+    ? getActiveGeminiFallbackChain(baseModel)
+    : [baseModel];
+
+  let currentModelName = initialChain[0] || baseModel;
+  let modelSwitchCount = 0;
 
   const keyManager = new APIKeyManager(settings.apiKeys);
   const totalAllowedAttempts = maxRetries + settings.apiKeys.length * 2;
@@ -1216,7 +1436,7 @@ STRICT JSON OUTPUT MANDATE:
 
       let cachedContentName: string | null = null;
       try {
-        cachedContentName = await getOrEstablishGeminiCache(ai, modelName, currentApiKey, coreInstruction, signal);
+        cachedContentName = await getOrEstablishGeminiCache(ai, currentModelName, currentApiKey, coreInstruction, signal);
       } catch {
         cachedContentName = null;
       }
@@ -1249,15 +1469,15 @@ STRICT JSON OUTPUT MANDATE:
       let response: any;
       try {
         response = await ai.models.generateContent({
-          model: modelName,
+          model: currentModelName,
           contents: contents,
           config: generateConfig,
         });
       } catch (genErr: any) {
         if (cachedContentName) {
-          geminiContextCacheMap.delete(`${modelName}_${currentApiKey.slice(-6)}_${coreInstruction.length}`);
+          geminiContextCacheMap.delete(`${currentModelName}_${currentApiKey.slice(-6)}_${coreInstruction.length}`);
           response = await ai.models.generateContent({
-            model: modelName,
+            model: currentModelName,
             contents: userPrompt,
             config: {
               systemInstruction: systemInstruction,
@@ -1320,7 +1540,7 @@ STRICT JSON OUTPUT MANDATE:
               signal?.throwIfAborted();
               const refinedMap = await refineProblematicCuesForStandards(
                 ai,
-                modelName,
+                currentModelName,
                 problematicCues,
                 settings,
                 signal
@@ -1417,8 +1637,39 @@ STRICT JSON OUTPUT MANDATE:
         const service = settings.openAICompatibleServices.find(item => item.id === settings.activeOpenAICompatibleServiceId) || settings.openAICompatibleServices[0];
         throw new Error(getOpenAICompatibleFriendlyError(error, service?.name));
       }
-      if (errorMessage.includes('fetch failed') || errorMessage.includes('location')) throw new Error(getFriendlyErrorMessage(error, modelName));
+      if (errorMessage.includes('fetch failed') || errorMessage.includes('location')) throw new Error(getFriendlyErrorMessage(error, currentModelName));
       
+      // Intelligent Gemini Model Fallback on 503 / overloaded / UNAVAILABLE / high demand
+      if (settings.aiProvider === 'gemini' && isModelOverloadedError(errorMessage)) {
+        blacklistModelInSession(currentModelName);
+
+        if (modelSwitchCount < MAX_MODEL_FALLBACK_SWITCHES) {
+          const nextChain = getActiveGeminiFallbackChain(baseModel);
+          const nextModel = nextChain.find(m => m !== currentModelName);
+
+          if (nextModel && nextModel !== currentModelName) {
+            const prevModel = currentModelName;
+            currentModelName = nextModel;
+            modelSwitchCount++;
+
+            notifyModelFallback(prevModel, nextModel, errorMessage, modelSwitchCount);
+
+            // Invalidate context cache for congested model
+            geminiContextCacheMap.delete(`${prevModel}_${currentApiKey.slice(-6)}_${getCoreSystemInstruction(settings.targetLanguage, forceParagraphMode ? 'paragraph' : 'default').length}`);
+
+            // Small adaptive delay and immediately continue with new model and current target batch
+            await delay(1200);
+            continue;
+          }
+        }
+
+        overloadRetries++;
+        if (overloadRetries <= 2) {
+          await delay(Math.min(overloadWaitMs, 10000));
+          continue;
+        }
+      }
+
       const isOverloaded = errorMessage.includes('503') || errorMessage.includes('overloaded') || errorMessage.includes('unavailable');
       if (isOverloaded) {
           overloadRetries++;
@@ -1518,7 +1769,13 @@ export const retranslateSelectedBlocks = async (
     settings.aiProvider
   );
 
-  const modelName = getResolvedGeminiModel(settings.model);
+  const baseModel = getResolvedGeminiModel(settings.model);
+  const initialChain = settings.aiProvider === 'gemini'
+    ? getActiveGeminiFallbackChain(baseModel)
+    : [baseModel];
+
+  let currentModelName = initialChain[0] || baseModel;
+  let modelSwitchCount = 0;
 
   const keyManager = new APIKeyManager(settings.apiKeys);
   const totalAllowedAttempts = maxRetries + settings.apiKeys.length * 2;
@@ -1576,7 +1833,7 @@ STRICT JSON OUTPUT MANDATE:
 
       let cachedContentName: string | null = null;
       try {
-        cachedContentName = await getOrEstablishGeminiCache(ai, modelName, currentApiKey, coreInstruction, signal);
+        cachedContentName = await getOrEstablishGeminiCache(ai, currentModelName, currentApiKey, coreInstruction, signal);
       } catch {
         cachedContentName = null;
       }
@@ -1601,15 +1858,15 @@ STRICT JSON OUTPUT MANDATE:
       let response: any;
       try {
         response = await ai.models.generateContent({
-          model: modelName,
+          model: currentModelName,
           contents: contents,
           config: generateConfig,
         });
       } catch (err: any) {
         if (cachedContentName) {
-          geminiContextCacheMap.delete(`${modelName}_${currentApiKey.slice(-6)}_${coreInstruction.length}`);
+          geminiContextCacheMap.delete(`${currentModelName}_${currentApiKey.slice(-6)}_${coreInstruction.length}`);
           response = await ai.models.generateContent({
-            model: modelName,
+            model: currentModelName,
             contents: userPrompt,
             config: {
               systemInstruction,
@@ -1636,7 +1893,25 @@ STRICT JSON OUTPUT MANDATE:
         const service = settings.openAICompatibleServices.find(item => item.id === settings.activeOpenAICompatibleServiceId) || settings.openAICompatibleServices[0];
         throw new Error(getOpenAICompatibleFriendlyError(error, service?.name));
       }
-      if (errorMessage.includes('fetch failed') || errorMessage.includes('location')) throw new Error(getFriendlyErrorMessage(error, modelName));
+      if (errorMessage.includes('fetch failed') || errorMessage.includes('location')) throw new Error(getFriendlyErrorMessage(error, currentModelName));
+      
+      if (settings.aiProvider === 'gemini' && isModelOverloadedError(errorMessage)) {
+        blacklistModelInSession(currentModelName);
+        if (modelSwitchCount < MAX_MODEL_FALLBACK_SWITCHES) {
+          const nextChain = getActiveGeminiFallbackChain(baseModel);
+          const nextModel = nextChain.find(m => m !== currentModelName);
+          if (nextModel && nextModel !== currentModelName) {
+            const prevModel = currentModelName;
+            currentModelName = nextModel;
+            modelSwitchCount++;
+            notifyModelFallback(prevModel, nextModel, errorMessage, modelSwitchCount);
+            await delay(1200);
+            continue;
+          }
+        }
+        await delay(overloadWaitMs);
+        continue;
+      }
       if (errorMessage.includes('503') || errorMessage.includes('overloaded') || errorMessage.includes('unavailable')) {
         await delay(overloadWaitMs);
         continue;
