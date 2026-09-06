@@ -42,12 +42,18 @@ async function testGemma4SamplingPipeline() {
           const tags = Array.from(new Set(tagMatches.map(m => m[1])));
           responseContent = tags.map(tag => `[TRANSLATE_${tag}]ترجمه طبیعی و روان برای دیالوگ بخش ${tag}[/TRANSLATE_${tag}]`).join('\n');
         } else {
-          // Dynamic JSON response for all requested cue IDs
-          const idMatches = [
-            ...userMsg.matchAll(/"id"\s*:\s*(\d+)/g),
-            ...userMsg.matchAll(/⟦(\d+)⟧/g)
-          ];
-          const ids = Array.from(new Set(idMatches.map(m => parseInt(m[1], 10))));
+          // Dynamic JSON response for target cue IDs (extract from TARGET MARKED PARAGRAPH section or exclude schema example 123)
+          const targetSection = userMsg.includes('TARGET MARKED PARAGRAPH') 
+            ? userMsg.split('TARGET MARKED PARAGRAPH')[1].split('FUTURE CONTEXT')[0]
+            : userMsg;
+          const markerMatches = [...targetSection.matchAll(/⟦(\d+)⟧/g)];
+          let ids = [];
+          if (markerMatches.length > 0) {
+            ids = Array.from(new Set(markerMatches.map(m => parseInt(m[1], 10))));
+          } else {
+            const idMatches = [...targetSection.matchAll(/"id"\s*:\s*(\d+)/g)];
+            ids = Array.from(new Set(idMatches.map(m => parseInt(m[1], 10)))).filter(id => id !== 123);
+          }
           if (ids.length > 0) {
             const items = ids.map(id => ({
               id,
@@ -75,11 +81,11 @@ async function testGemma4SamplingPipeline() {
             }
           ]
         };
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Connection': 'close' });
         res.end(JSON.stringify(responseData));
       } catch (serverErr) {
         console.error('MOCK SERVER ERROR:', serverErr);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.writeHead(500, { 'Content-Type': 'application/json', 'Connection': 'close' });
         res.end(JSON.stringify({ error: String(serverErr) }));
       }
     });
@@ -199,8 +205,126 @@ async function testGemma4SamplingPipeline() {
     assert.ok(skeletonResponse.includes('[TRANSLATE_23]'), 'Must return translated tag 23');
     console.log('PASS: LM Studio pipeline with skeleton_str batch size 24 executed with 100% tag fidelity');
 
+    // 7. Test LM Studio few-shot prompt injection in Conversational Tone
+    const conversationalSettings = {
+      ...defaultGemmaSettings,
+      tone: 'conversational'
+    };
+    const conversationalBatch = [
+      { id: 201, text: 'You gotta be kidding me, no way this works!' }
+    ];
+    await geminiService.translateBatch(conversationalBatch, [], [], conversationalSettings, undefined, true);
+    const convBody = receivedBodies[receivedBodies.length - 1];
+    const convUserMsg = convBody.messages.find(m => m.role === 'user')?.content || '';
+    assert.ok(convUserMsg.includes('FEW-SHOT EXAMPLES'), 'User prompt for LM Studio must include FEW-SHOT EXAMPLES');
+    assert.ok(convUserMsg.includes('مگه عقلت رو از دست دادی؟ همین الان بذارش زمین!'), 'Must include conversational few-shot example');
+    assert.ok(convUserMsg.includes('الگوریتم بهینه‌سازی، بازده محاسباتی را به طور چشمگیری افزایش می‌دهد.'), 'Must include formal/educational few-shot example');
+    console.log('PASS: LM Studio conversational prompt contains authentic cinematic few-shot example');
+
+    // 8. Test LM Studio few-shot prompt injection in Formal Tone
+    const formalSettings = {
+      ...defaultGemmaSettings,
+      tone: 'formal'
+    };
+    const formalBatch = [
+      { id: 202, text: 'The empirical analysis demonstrates statistical significance across all test parameters.' }
+    ];
+    await geminiService.translateBatch(formalBatch, [], [], formalSettings, undefined, true);
+    const formalBody = receivedBodies[receivedBodies.length - 1];
+    const formalUserMsg = formalBody.messages.find(m => m.role === 'user')?.content || '';
+    assert.ok(formalUserMsg.includes('FEW-SHOT EXAMPLES'), 'User prompt for LM Studio formal tone must include FEW-SHOT EXAMPLES');
+    assert.ok(formalUserMsg.includes('الگوریتم بهینه‌سازی، بازده محاسباتی را به طور چشمگیری افزایش می‌دهد.'), 'Must include formal/educational few-shot example');
+    console.log('PASS: LM Studio formal prompt contains precise educational few-shot example');
+
+    // 9. Verify Gemini Prompt does NOT contain the LM Studio few-shot block (Strict Isolation)
+    const geminiPrompt = geminiService.buildContextualTranslationPrompt(
+      conversationalBatch,
+      [],
+      [],
+      true,
+      true, // isGemini = true
+      [],
+      '',
+      'gemini'
+    );
+    assert.ok(!geminiPrompt.includes('FEW-SHOT EXAMPLES (Strictly follow this JSON structure'), 'Gemini prompt must remain strictly unchanged without LM Studio few-shot block');
+    console.log('PASS: Strict isolation verified - Gemini prompt remains completely intact without LM Studio few-shot block');
+
+    // 10. Test LM Studio pipeline with 'movie' tone
+    const movieSettings = {
+      ...defaultGemmaSettings,
+      tone: 'movie'
+    };
+    const movieBatch = [
+      { id: 301, text: 'Look at me. We are not walking away from this empty-handed.' }
+    ];
+    const movieResults = await geminiService.translateBatch(movieBatch, [], [], movieSettings, undefined, true);
+    assert.equal(movieResults.length, 1);
+    assert.equal(movieResults[0].id, 301);
+
+    const movieBody = receivedBodies[receivedBodies.length - 1];
+    const movieSysMsg = movieBody.messages.find(m => m.role === 'system')?.content || '';
+    assert.ok(movieSysMsg.includes('ترجمه باید طوری باشد که اگر کسی نسخه انگلیسی را ندیده باشد، فکر کند این دیالوگ از اول به فارسی نوشته شده است.'), 'Movie tone must include key naturalness rule');
+    assert.ok(movieSysMsg.includes('تأکید ویژه بر ضرباهنگ صحنه، ریتم دیالوگ، حس و حال دراماتیک'), 'Movie tone must emphasize dramatic rhythm and scene flow');
+    assert.ok(movieSysMsg.includes('دوری اکید از شکسته کردن مکانیکی و اجباری واژگان'), 'Movie tone must strictly avoid mechanical word breaking');
+    console.log('PASS: LM Studio pipeline with movie tone successfully verified with enhanced dramatic and native rhythm rules');
+
+    // 11. Test LM Studio pipeline with 'conversational' tone system instruction verification
+    const convBodyFull = receivedBodies.find(b => b.messages.some(m => m.role === 'system' && m.content.includes('لحن دیالوگ: محاوره‌ای و سینمایی پرکشش (Tehrani Spoken)')));
+    assert.ok(convBodyFull, 'Conversational tone request must include reinforced Tehrani Spoken rules');
+    const convSysMsg = convBodyFull.messages.find(m => m.role === 'system')?.content || '';
+    assert.ok(convSysMsg.includes('ترجمه باید طوری باشد که اگر کسی نسخه انگلیسی را ندیده باشد، فکر کند این دیالوگ از اول به فارسی نوشته شده است.'), 'Conversational tone must include key naturalness rule');
+    assert.ok(convSysMsg.includes('تأکید بر ریتم دیالوگ، گرمی، حس و حال و معادل‌های طبیعی ایرانی'), 'Conversational tone must emphasize rhythm and natural Iranian equivalents');
+    assert.ok(convSysMsg.includes('دوری اکید از شکسته کردن مکانیکی و اجباری واژگان'), 'Conversational tone must strictly avoid mechanical breaking');
+    console.log('PASS: LM Studio pipeline with conversational tone successfully verified with enhanced warmth, rhythm, and naturalness');
+
+    // 12. Verify Gemini Movie tone isolation
+    const geminiMovieInstruction = constants.getSystemInstruction('movie', 'entertainment', '', 'netflix', [], '', 'fa', 'default', 'gemini');
+    assert.ok(geminiMovieInstruction.includes('لحن سینمایی، بومی‌سازی اصطلاحات عامیانه و حفظ بار دراماتیک (Slang)'), 'Gemini movie tone retains original concise instruction');
+    assert.ok(!geminiMovieInstruction.includes('فکر کند این دیالوگ از اول به فارسی نوشته شده است'), 'Gemini instruction must NOT contain local-only additions');
+    console.log('PASS: Gemini movie tone isolation verified');
+
+    // 13. Verify Strict JSON Output Mandate in user prompt for LM Studio
+    const lastLmBody = receivedBodies[receivedBodies.length - 1];
+    const lastUserMsg = lastLmBody.messages.find(m => m.role === 'user')?.content || '';
+    assert.ok(lastUserMsg.includes('STRICT JSON OUTPUT MANDATE'), 'User prompt must include STRICT JSON OUTPUT MANDATE');
+    assert.ok(lastUserMsg.includes('Stop output immediately after the closing bracket ]'), 'User prompt must instruct stopping after closing bracket ]');
+    assert.ok(lastUserMsg.includes('Absolutely NO markdown code blocks'), 'User prompt must forbid markdown code blocks');
+    console.log('PASS: Strict JSON Output Mandate successfully injected at the end of LM Studio user prompt');
+
+    // 14. Multi-Batch Parsing Stress Test for LM Studio
+    console.log('\n--- Executing Multi-Batch JSON Parsing Reliability Test for LM Studio ---');
+    const testBatches = [
+      [{ id: 401, text: 'First dialogue line for stress testing.' }],
+      [
+        { id: 402, text: 'Second dialogue line in multi-item test.' },
+        { id: 403, text: 'Third dialogue line in multi-item test.' }
+      ],
+      [
+        { id: 404, text: 'Fourth dialogue with questions? How are you doing?' },
+        { id: 405, text: 'Fifth dialogue with exclamation! Stay back!' },
+        { id: 406, text: 'Sixth dialogue with numbers like 100% and 42.' }
+      ],
+      [{ id: 407, text: 'Seventh standalone line with special characters: "Quotes" & symbols.' }]
+    ];
+
+    let successCount = 0;
+    for (let i = 0; i < testBatches.length; i++) {
+      const batch = testBatches[i];
+      const res = await geminiService.translateBatch(batch, [], [], defaultGemmaSettings, undefined, true);
+      assert.equal(res.length, batch.length, `Batch ${i + 1} item count mismatch`);
+      for (let j = 0; j < batch.length; j++) {
+        assert.equal(res[j].id, batch[j].id, `Batch ${i + 1} cue id mismatch at index ${j}`);
+        assert.ok(res[j].translatedText && res[j].translatedText.length > 0, `Batch ${i + 1} empty text`);
+      }
+      successCount++;
+    }
+    assert.equal(successCount, testBatches.length, 'All test batches must succeed');
+    console.log(`PASS: Multi-batch stress test completed: ${successCount}/${testBatches.length} batches parsed successfully (100% success rate)`);
+
     console.log('\n--- ALL GEMMA 4 SAMPLING & PIPELINE TESTS COMPLETED SUCCESSFULLY! ---');
   } finally {
+    if (server.closeAllConnections) server.closeAllConnections();
     server.close();
   }
 }

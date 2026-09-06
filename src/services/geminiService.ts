@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic, GlossaryItem } from "../types";
+import { BatchRequest, BatchResponse, AppSettings, UserAPIKey, TargetLanguage, OpenAICompatibleService, TranslationDiagnostic, GlossaryItem, AIProvider } from "../types";
 import { APP_CONFIG, DEFAULT_GEMINI_MODEL, getResolvedGeminiModel, getSystemInstruction, getCoreSystemInstruction, getDynamicSystemInstruction, LANGUAGE_PROMPTS, GEMINI_CONTEXT_PRE_WINDOW, GEMINI_CONTEXT_POST_WINDOW, getGeminiTemperature } from "../constants";
 import { SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION } from "./methods/skeleton_str";
 import { filterBatchWithMemory, addBatchToMemory } from "./translationMemory";
@@ -654,7 +654,8 @@ export const buildContextualTranslationPrompt = (
   useParagraphMode: boolean,
   isGemini: boolean = false,
   glossary: GlossaryItem[] = [],
-  doNotTranslateTerms: string = ''
+  doNotTranslateTerms: string = '',
+  provider?: AIProvider | string
 ): string => {
   if (isGemini) {
     const pre = contextPre.slice(-GEMINI_CONTEXT_PRE_WINDOW);
@@ -741,11 +742,31 @@ ${JSON.stringify(targetBatch)}`;
 
 FUTURE CONTEXT (Study for flow):
 ${JSON.stringify(contextPost)}`;
-    prompt += `
+    if (provider === 'lm_studio') {
+      prompt += `
+FEW-SHOT EXAMPLES (Strictly follow this JSON structure and high-standard Persian translation):
+• Example 1 (Cinematic & Conversational / محاوره‌ای فیلم و سریال):
+Input: [{"id": 101, "text": "Are you out of your mind? Put that down right now!"}]
+Output: [{"id": 101, "translatedText": "مگه عقلت رو از دست دادی؟ همین الان بذارش زمین!"}]
 
+• Example 2 (Formal & Educational / رسمی و علمی-آموزشی):
+Input: [{"id": 102, "text": "The optimization algorithm significantly increases computational throughput."}]
+Output: [{"id": 102, "translatedText": "الگوریتم بهینه‌سازی، بازده محاسباتی را به طور چشمگیری افزایش می‌دهد."}]
+`;
+    }
+    prompt += `
 Task: Translate TARGET BATCH into the configured target language.
 Ensure the flow matches the scenario. Use "Tehrani Spoken" rules if conversational.
 Return JSON array matching the schema.`;
+    if (provider === 'lm_studio') {
+      prompt += `
+
+STRICT JSON OUTPUT MANDATE:
+- Output MUST be strictly and exclusively a raw, valid JSON array.
+- Absolutely NO preamble, commentary, greetings, notes, or explanations before or after the JSON array.
+- Strictly NO markdown code fences, backticks, or labels (do NOT use \`\`\` or \`\`\`json).
+- Stop output immediately after the closing bracket ] of the JSON array.`;
+    }
     return prompt;
   }
 
@@ -755,6 +776,18 @@ Return JSON array matching the schema.`;
 `;
   prompt += `Each target block starts with a marker like ⟦123⟧. Treat every marker as a HARD subtitle cue boundary. Keep the exact IDs in your final JSON so the app can place each translation back into its original timing.
 `;
+  if (provider === 'lm_studio') {
+    prompt += `
+FEW-SHOT EXAMPLES (Strictly follow this JSON structure and high-standard Persian translation):
+• Example 1 (Cinematic & Conversational / محاوره‌ای فیلم و سریال):
+Input: ⟦101⟧ Are you out of your mind? Put that down right now!
+Output: [{"id": 101, "translatedText": "مگه عقلت رو از دست دادی؟ همین الان بذارش زمین!"}]
+
+• Example 2 (Formal & Educational / رسمی و علمی-آموزشی):
+Input: ⟦102⟧ The optimization algorithm significantly increases computational throughput.
+Output: [{"id": 102, "translatedText": "الگوریتم بهینه‌سازی، بازده محاسباتی را به طور چشمگیری افزایش می‌دهد."}]
+`;
+  }
   if (contextPre.length > 0) {
     prompt += `
 PAST CONTEXT (reference only; do not translate these IDs):
@@ -798,6 +831,15 @@ Translation quality requirements:
   prompt += `- Prefer one line when concise; use at most two readable lines only when needed.
 `;
   prompt += `- Return ONLY a valid JSON array: [{"id": number, "translatedText": "..."}]. Do not include markdown or explanations.`;
+  if (provider === 'lm_studio') {
+    prompt += `
+
+STRICT JSON OUTPUT MANDATE:
+- Output MUST be strictly and exclusively a raw, valid JSON array: [{"id": number, "translatedText": "..."}].
+- Absolutely NO preamble, commentary, greetings, notes, or explanations before or after the JSON array.
+- Strictly NO markdown code fences, backticks, or labels (do NOT use \`\`\` or \`\`\`json).
+- Stop output immediately after the closing bracket ] of the JSON array. Do not generate any text, tokens, or characters after ].`;
+  }
   return prompt;
 };
 
@@ -1116,7 +1158,8 @@ export const translateBatch = async (
         promptMethod === 'paragraph',
         settings.aiProvider === 'gemini',
         settings.glossary,
-        settings.doNotTranslateTerms
+        settings.doNotTranslateTerms,
+        settings.aiProvider
       );
 
       const systemInstruction = getSystemInstruction(
@@ -1138,7 +1181,14 @@ export const translateBatch = async (
 
       if (settings.aiProvider === 'lm_studio') {
         signal?.throwIfAborted();
-        const text = await callLmStudioChat(settings, systemInstruction, `${userPrompt}\n\nReturn ONLY a JSON array, with no markdown.`, signal);
+        const lmStudioPrompt = `${userPrompt}
+
+STRICT JSON OUTPUT MANDATE:
+- Output MUST be strictly and exclusively a raw JSON array matching [{"id": number, "translatedText": "..."}].
+- Absolutely NO introductory or concluding text, conversation, notes, or explanations before or after the array.
+- Absolutely NO markdown code blocks, backticks, or formatting (strictly NO \`\`\` or \`\`\`json).
+- Stop output immediately after the closing bracket ] of the JSON array.`;
+        const text = await callLmStudioChat(settings, systemInstruction, lmStudioPrompt, signal);
         return validateBatchResponse(targetIds, JSON.parse(extractJsonArray(text)));
       }
 
@@ -1483,7 +1533,14 @@ export const retranslateSelectedBlocks = async (
 
       if (settings.aiProvider === 'lm_studio') {
         signal?.throwIfAborted();
-        const text = await callLmStudioChat(settings, systemInstruction, `${userPrompt}\n\nReturn ONLY a JSON array, with no markdown.`);
+        const lmStudioRetryPrompt = `${userPrompt}
+
+STRICT JSON OUTPUT MANDATE:
+- Output MUST be strictly and exclusively a raw JSON array matching [{"id": number, "translatedText": "..."}].
+- Absolutely NO introductory or concluding text, conversation, notes, or explanations before or after the array.
+- Absolutely NO markdown code blocks, backticks, or formatting (strictly NO \`\`\` or \`\`\`json).
+- Stop output immediately after the closing bracket ] of the JSON array.`;
+        const text = await callLmStudioChat(settings, systemInstruction, lmStudioRetryPrompt);
         return validateBatchResponse(targetIds, JSON.parse(extractJsonArray(text)));
       }
 
