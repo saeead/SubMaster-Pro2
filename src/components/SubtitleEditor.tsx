@@ -1,13 +1,13 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { SubtitleBlock, NetflixError } from '../types';
-import { Clock, AlertTriangle, Search, Replace, ArrowLeft, Layers, Undo, Redo, CheckSquare, Square, Languages, X, Loader2, Wand2, Trash2, ChevronsDown, ChevronsUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Clock, AlertTriangle, Search, Replace, ArrowLeft, Layers, Undo, Redo, CheckSquare, Square, Languages, X, Loader2, Wand2, Trash2, ChevronsDown, ChevronsUp, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 
 interface SubtitleEditorProps {
   blocks: SubtitleBlock[];
-  onUpdateBlock: (id: number, text: string) => void;
+  onUpdateBlock: (id: number, text: string, field?: 'translated' | 'original') => void;
   validationErrors?: NetflixError[];
-  onFindReplace: (find: string, replace: string, scope: 'current' | 'all') => void;
+  onFindReplace: (find: string, replace: string, scope: 'current' | 'all', targetField?: 'translated' | 'original' | 'both') => void;
   hasMultipleFiles: boolean;
   
   // Undo/Redo Props
@@ -15,7 +15,7 @@ interface SubtitleEditorProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  onCommitChange: (id: number, oldText: string, newText: string) => void;
+  onCommitChange: (id: number, oldText: string, newText: string, field?: 'translated' | 'original') => void;
   onRetranslateSelected: (ids: number[]) => Promise<void> | void;
   onAutoFixSelected: (ids: number[]) => void;
   onDeleteSelected: (ids: number[]) => void;
@@ -43,6 +43,10 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const [findTerm, setFindTerm] = useState('');
   const [replaceTerm, setReplaceTerm] = useState('');
   const [scope, setScope] = useState<'current' | 'all'>('current');
+  const [targetField, setTargetField] = useState<'translated' | 'original' | 'both'>('translated');
+  const [dirtyBlocks, setDirtyBlocks] = useState<Record<number, { originalText?: boolean; translatedText?: boolean }>>({});
+  const [recentlySavedBlockIds, setRecentlySavedBlockIds] = useState<Record<number, boolean>>({});
+  const initialValuesRef = useRef<Record<number, { originalText?: string; translatedText?: string }>>({});
   const [selectedBlockIds, setSelectedBlockIds] = useState<number[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -136,9 +140,50 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     return validationErrors.find(e => e.blockId === id);
   };
 
+  const triggerSavedFeedback = (blockId: number) => {
+    setRecentlySavedBlockIds(prev => ({ ...prev, [blockId]: true }));
+    setTimeout(() => {
+      setRecentlySavedBlockIds(prev => {
+        const next = { ...prev };
+        delete next[blockId];
+        return next;
+      });
+    }, 2500);
+  };
+
+  const handleManualSaveBlock = (blockId: number) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    const initial = initialValuesRef.current[blockId];
+    let hasChanged = false;
+
+    if (initial?.originalText !== undefined && initial.originalText !== block.originalText) {
+      onCommitChange(blockId, initial.originalText, block.originalText, 'original');
+      initial.originalText = block.originalText;
+      hasChanged = true;
+    }
+
+    const currentTranslated = block.translatedText || '';
+    if (initial?.translatedText !== undefined && initial.translatedText !== currentTranslated) {
+      onCommitChange(blockId, initial.translatedText, currentTranslated, 'translated');
+      initial.translatedText = currentTranslated;
+      hasChanged = true;
+    }
+
+    setDirtyBlocks(prev => {
+      const next = { ...prev };
+      delete next[blockId];
+      return next;
+    });
+
+    if (hasChanged) {
+      triggerSavedFeedback(blockId);
+    }
+  };
+
   const handleReplaceClick = () => {
     if (findTerm.trim()) {
-      onFindReplace(findTerm, replaceTerm, scope);
+      onFindReplace(findTerm, replaceTerm, scope, targetField);
     }
   };
 
@@ -222,36 +267,70 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
       
       {/* Find & Replace Tool Bar */}
       <div className="glass rounded-2xl p-6 border border-[#00f0ff]/20 animate-in fade-in slide-in-from-top-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2 text-[#00f0ff]">
                 <Replace className="w-5 h-5" />
                 <h3 className="font-bold text-sm">تصحیح گروهی کلمات (Find & Replace)</h3>
             </div>
             
-            <div className="flex items-center gap-3">
-                {/* Separate Square Undo / Redo Buttons */}
-                <div className="flex items-center gap-2 mr-4">
+            <div className="flex flex-wrap items-center gap-3">
+                {/* Target field selector */}
+                <div className="flex bg-[#0a0e27] rounded-lg p-1 border border-white/10">
                     <button 
-                        onClick={onUndo}
-                        disabled={!canUndo}
-                        className={`
-                            w-9 h-9 flex items-center justify-center rounded-xl border transition-all duration-200
-                            ${canUndo 
-                                ? 'bg-[#0a0e27] hover:bg-white/10 border-white/10 text-white hover:border-[#00f0ff]/50' 
-                                : 'bg-black/20 border-transparent text-white/20 cursor-not-allowed'
-                            }
-                        `}
-                        title="Undo (Ctrl+Z)"
+                        type="button"
+                        onClick={() => setTargetField('translated')}
+                        className={`px-3 py-1 text-xs rounded transition-colors ${targetField === 'translated' ? 'bg-[#00f0ff]/20 text-[#00f0ff] font-bold' : 'text-white/50 hover:text-white'}`}
+                        title="جستجو و جایگزینی در متن ترجمه"
                     >
-                        <Undo className="w-4 h-4" />
+                        متن ترجمه
                     </button>
                     <button 
+                        type="button"
+                        onClick={() => setTargetField('original')}
+                        className={`px-3 py-1 text-xs rounded transition-colors ${targetField === 'original' ? 'bg-[#00f0ff]/20 text-[#00f0ff] font-bold' : 'text-white/50 hover:text-white'}`}
+                        title="جستجو و جایگزینی در متن اصلی / منبع (اصلاح خطاهای صوت به متن)"
+                    >
+                        متن منبع (صوت به متن)
+                    </button>
+                    <button 
+                        type="button"
+                        onClick={() => setTargetField('both')}
+                        className={`px-3 py-1 text-xs rounded transition-colors ${targetField === 'both' ? 'bg-[#00f0ff]/20 text-[#00f0ff] font-bold' : 'text-white/50 hover:text-white'}`}
+                        title="جستجو و جایگزینی در هر دو متن اصلی و ترجمه"
+                    >
+                        هر دو متن
+                    </button>
+                </div>
+
+                {/* Scope Selector */}
+                <div className="flex bg-[#0a0e27] rounded-lg p-1 border border-white/10">
+                        <button 
+                            type="button"
+                            onClick={() => setScope('current')}
+                            className={`px-3 py-1 text-xs rounded transition-colors ${scope === 'current' ? 'bg-white/10 text-white font-bold' : 'text-white/50'}`}
+                        >
+                            فایل جاری
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => setScope('all')}
+                            className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-1 ${scope === 'all' ? 'bg-[#ff00ea]/20 text-[#ff00ea] font-bold' : 'text-white/50'}`}
+                        >
+                            <Layers className="w-3 h-3" />
+                            اعمال برای تمام فایل‌ها
+                        </button>
+                </div>
+
+                {/* Separate Square Redo / Undo Buttons (Swapped position as requested) */}
+                <div className="flex items-center gap-2 mr-2">
+                    <button 
+                        type="button"
                         onClick={onRedo}
                         disabled={!canRedo}
                         className={`
                             w-9 h-9 flex items-center justify-center rounded-xl border transition-all duration-200
                             ${canRedo 
-                                ? 'bg-[#0a0e27] hover:bg-white/10 border-white/10 text-white hover:border-[#00f0ff]/50' 
+                                ? 'bg-[#0a0e27] hover:bg-white/10 border-white/10 text-white hover:border-[#00f0ff]/50 cursor-pointer' 
                                 : 'bg-black/20 border-transparent text-white/20 cursor-not-allowed'
                             }
                         `}
@@ -259,34 +338,38 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                     >
                         <Redo className="w-4 h-4" />
                     </button>
-                </div>
-
-                <div className="flex bg-[#0a0e27] rounded-lg p-1 border border-white/10">
-                        <button 
-                            onClick={() => setScope('current')}
-                            className={`px-3 py-1 text-xs rounded transition-colors ${scope === 'current' ? 'bg-white/10 text-white' : 'text-white/50'}`}
-                        >
-                            فایل جاری
-                        </button>
-                        <button 
-                            onClick={() => setScope('all')}
-                            className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-1 ${scope === 'all' ? 'bg-[#ff00ea]/20 text-[#ff00ea]' : 'text-white/50'}`}
-                        >
-                            <Layers className="w-3 h-3" />
-                            اعمال برای تمام فایل‌ها
-                        </button>
+                    <button 
+                        type="button"
+                        onClick={onUndo}
+                        disabled={!canUndo}
+                        className={`
+                            w-9 h-9 flex items-center justify-center rounded-xl border transition-all duration-200
+                            ${canUndo 
+                                ? 'bg-[#0a0e27] hover:bg-white/10 border-white/10 text-white hover:border-[#00f0ff]/50 cursor-pointer' 
+                                : 'bg-black/20 border-transparent text-white/20 cursor-not-allowed'
+                            }
+                        `}
+                        title="Undo (Ctrl+Z)"
+                    >
+                        <Undo className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
         </div>
         
         <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="flex-1 w-full space-y-2">
-             <label className="text-xs text-white/50 pr-1">کلمه اشتباه (موجود در متن)</label>
+             <label className="text-xs text-white/50 pr-1 flex items-center justify-between">
+               <span>کلمه اشتباه (موجود در متن)</span>
+               <span className="text-[11px] text-[#00f0ff]/80">
+                 {targetField === 'original' ? 'جستجو در متن اصلی (STT)' : targetField === 'both' ? 'جستجو در هر دو متن' : 'جستجو در متن ترجمه'}
+               </span>
+             </label>
              <div className="relative">
                 <input 
                   value={findTerm}
                   onChange={(e) => setFindTerm(e.target.value)}
-                  placeholder="مثلاً: گالکسی"
+                  placeholder={targetField === 'original' ? 'مثلاً: wether (کلمه نادرست صوتی)' : 'مثلاً: گالکسی'}
                   className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-xl py-3 px-4 pl-10 text-sm dark:text-white text-slate-900 focus:border-[#00f0ff] focus:outline-none transition-colors shadow-xs placeholder:text-text-muted/60"
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
@@ -302,12 +385,13 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
              <input 
                 value={replaceTerm}
                 onChange={(e) => setReplaceTerm(e.target.value)}
-                placeholder="مثلاً: کهکشان"
+                placeholder={targetField === 'original' ? 'مثلاً: weather' : 'مثلاً: کهکشان'}
                 className="w-full dark:bg-[#0a0e27] bg-white border dark:border-white/10 border-slate-200 rounded-xl py-3 px-4 text-sm dark:text-white text-slate-900 focus:border-[#00f0ff] focus:outline-none transition-colors shadow-xs placeholder:text-text-muted/60"
              />
           </div>
 
           <button 
+            type="button"
             onClick={handleReplaceClick}
             disabled={!findTerm.trim()}
             className="w-full md:w-auto h-11 px-5 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/20 text-sm font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center justify-center gap-2"
@@ -326,6 +410,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
         {visibleBlocks.map((block) => {
           const error = getErrorForBlock(block.id);
           const hasError = !!error;
+          const isBlockDirty = !!dirtyBlocks[block.id] && (dirtyBlocks[block.id].originalText || dirtyBlocks[block.id].translatedText);
+          const isBlockRecentlySaved = !!recentlySavedBlockIds[block.id];
           
           return (
             <div 
@@ -369,9 +455,9 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                 </div>
               )}
 
-              {/* Header: ID and Time */}
-              <div className="flex justify-between items-center mb-4 text-xs font-mono">
-                <div className="flex items-center gap-3">
+              {/* Header: ID, Time, and Save / Saved Status */}
+              <div className="flex justify-between items-center mb-4 text-xs">
+                <div className="flex items-center gap-3 font-mono">
                     <span className={`${hasError ? 'text-[#E50914]' : 'text-[#00f0ff]'} font-bold`}>#{block.index}</span>
                     <div className="flex items-center gap-2 dark:bg-[#0a0e27] bg-slate-100 px-3 py-1.5 rounded-lg border dark:border-white/10 border-slate-200 dark:text-white/50 text-slate-600">
                         <Clock className="w-3 h-3" />
@@ -380,36 +466,136 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                         <span>{block.endTime}</span>
                     </div>
                 </div>
+
+                <div className="flex items-center gap-2 font-persian">
+                  {/* Save button (appears immediately when user edits this block) */}
+                  {isBlockDirty && (
+                    <button
+                      type="button"
+                      onClick={() => handleManualSaveBlock(block.id)}
+                      className="group/save flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#00f0ff]/40 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 text-[#00f0ff] hover:border-[#00f0ff] text-xs font-bold font-persian transition-all duration-200 shadow-[0_0_15px_rgba(0,240,255,0.15)] hover:shadow-[0_0_22px_rgba(0,240,255,0.3)] active:scale-95 cursor-pointer animate-in fade-in zoom-in-95"
+                      title="ذخیره تغییرات این بلوک (کلیک بیرون یا Ctrl+S نیز ذخیره خودکار می‌کند)"
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[2.5] transition-transform duration-200 group-hover/save:scale-110" />
+                      <span>ذخیره تغییرات</span>
+                    </button>
+                  )}
+
+                  {/* Auto-saved / Saved confirmation feedback */}
+                  {isBlockRecentlySaved && !isBlockDirty && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-medium font-persian animate-in fade-in zoom-in-95 duration-200 shadow-[0_0_12px_rgba(16,185,129,0.12)]">
+                      <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>ذخیره شد</span>
+                    </div>
+                  )}
+                </div>
               </div>
     
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="ltr">
-                {/* Original Text */}
+                {/* Original Text (Editable) */}
                 <div className="relative group/input">
-                    <label className="absolute -top-3 left-3 px-2 dark:bg-[#0a0e27] bg-white text-[10px] dark:text-white/60 text-slate-600 uppercase tracking-wider rounded border dark:border-white/10 border-slate-200 font-semibold shadow-xs">Original</label>
-                    <div 
+                    <label className="absolute -top-3 left-3 z-10 px-2 dark:bg-[#0a0e27] bg-white text-[11px] dark:text-white/80 text-slate-700 rounded border dark:border-white/10 border-slate-200 font-semibold shadow-xs flex items-center gap-1.5 font-persian">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-white/50">Original</span>
+                      <span className="text-[10px] text-primary font-persian font-normal" dir="rtl">(متن اصلی / منبع)</span>
+                    </label>
+                    <textarea 
+                        value={block.originalText}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            onUpdateBlock(block.id, val, 'original');
+                            const initial = initialValuesRef.current[block.id]?.originalText ?? block.originalText;
+                            setDirtyBlocks(prev => ({
+                                ...prev,
+                                [block.id]: { ...prev[block.id], originalText: val !== initial }
+                            }));
+                        }}
+                        onFocus={() => {
+                            if (!initialValuesRef.current[block.id]) {
+                                initialValuesRef.current[block.id] = {};
+                            }
+                            if (initialValuesRef.current[block.id].originalText === undefined) {
+                                initialValuesRef.current[block.id].originalText = block.originalText;
+                            }
+                        }}
+                        onBlur={() => {
+                            const initial = initialValuesRef.current[block.id]?.originalText;
+                            const current = block.originalText;
+                            if (initial !== undefined && initial !== current) {
+                                onCommitChange(block.id, initial, current, 'original');
+                                initialValuesRef.current[block.id].originalText = current;
+                                triggerSavedFeedback(block.id);
+                            }
+                            setDirtyBlocks(prev => {
+                                const updated = { ...prev[block.id] };
+                                delete updated.originalText;
+                                if (!updated.translatedText) {
+                                    const next = { ...prev };
+                                    delete next[block.id];
+                                    return next;
+                                }
+                                return { ...prev, [block.id]: updated };
+                            });
+                        }}
+                        onKeyDown={(e) => {
+                            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                                e.preventDefault();
+                                handleManualSaveBlock(block.id);
+                            }
+                        }}
+                        placeholder="متن اصلی زیرنویس (جهت تصحیح اشتباهات صوتی قابل ویرایش است)..."
                         dir="auto"
-                        className="w-full p-4 dark:bg-[#0a0e27]/50 bg-slate-50/80 rounded-xl dark:text-white/80 text-slate-800 text-sm leading-7 border dark:border-white/5 border-slate-200 min-h-[100px] shadow-xs"
-                    >
-                        {block.originalText}
-                    </div>
+                        className="w-full p-4 dark:bg-[#0a0e27] bg-white rounded-xl text-sm leading-7 resize-y min-h-[100px] focus:outline-none border transition-all shadow-xs dark:text-white text-slate-900 dark:border-white/10 border-slate-200 focus:border-[#00f0ff]/60 focus:ring-1 focus:ring-sky-400/30"
+                    />
                 </div>
     
-                {/* Translated Text */}
+                {/* Translated Text (Editable) */}
                 <div className="relative group/input">
-                    <label className={`absolute -top-3 right-3 px-2 dark:bg-[#0a0e27] bg-white text-[10px] uppercase tracking-wider rounded border font-semibold shadow-xs ${hasError ? 'text-[#E50914] border-[#E50914]/50' : 'text-primary dark:border-[#00f0ff]/20 border-sky-400/40'}`}>Persian</label>
+                    <label className={`absolute -top-3 right-3 z-10 px-2 dark:bg-[#0a0e27] bg-white text-[11px] rounded border font-semibold shadow-xs flex items-center gap-1.5 font-persian ${hasError ? 'text-[#E50914] border-[#E50914]/50' : 'text-primary dark:border-[#00f0ff]/20 border-sky-400/40'}`}>
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-white/50">Persian</span>
+                      <span className="text-[10px] text-primary font-persian font-normal" dir="rtl">(ترجمه فارسی)</span>
+                    </label>
                     <textarea
                         value={block.translatedText || ''}
-                        onChange={(e) => onUpdateBlock(block.id, e.target.value)}
-                        onFocus={(e) => {
-                             // Capture original value on focus to detect changes for Undo stack
-                             e.currentTarget.dataset.originalValue = block.translatedText || '';
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            onUpdateBlock(block.id, val, 'translated');
+                            const initial = initialValuesRef.current[block.id]?.translatedText ?? (block.translatedText || '');
+                            setDirtyBlocks(prev => ({
+                                ...prev,
+                                [block.id]: { ...prev[block.id], translatedText: val !== initial }
+                            }));
                         }}
-                        onBlur={(e) => {
-                            const oldVal = e.currentTarget.dataset.originalValue;
-                            const newVal = block.translatedText || '';
-                            // Only commit if text actually changed from when user focused
-                            if (oldVal !== undefined && oldVal !== newVal) {
-                                onCommitChange(block.id, oldVal, newVal);
+                        onFocus={() => {
+                            if (!initialValuesRef.current[block.id]) {
+                                initialValuesRef.current[block.id] = {};
+                            }
+                            if (initialValuesRef.current[block.id].translatedText === undefined) {
+                                initialValuesRef.current[block.id].translatedText = block.translatedText || '';
+                            }
+                        }}
+                        onBlur={() => {
+                            const initial = initialValuesRef.current[block.id]?.translatedText;
+                            const current = block.translatedText || '';
+                            if (initial !== undefined && initial !== current) {
+                                onCommitChange(block.id, initial, current, 'translated');
+                                initialValuesRef.current[block.id].translatedText = current;
+                                triggerSavedFeedback(block.id);
+                            }
+                            setDirtyBlocks(prev => {
+                                const updated = { ...prev[block.id] };
+                                delete updated.translatedText;
+                                if (!updated.originalText) {
+                                    const next = { ...prev };
+                                    delete next[block.id];
+                                    return next;
+                                }
+                                return { ...prev, [block.id]: updated };
+                            });
+                        }}
+                        onKeyDown={(e) => {
+                            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                                e.preventDefault();
+                                handleManualSaveBlock(block.id);
                             }
                         }}
                         placeholder="در انتظار ترجمه..."
@@ -433,12 +619,12 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
       {renderPagination('bottom')}
 
       {selectedCount > 0 && (
-        <div className="fixed bottom-8 left-1/2 z-[65] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in">
-          <div className="glass flex flex-col gap-3 rounded-2xl border border-[#ff00ea]/30 bg-background/95 p-3 shadow-[0_0_30px_rgba(255,0,234,0.18)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-center text-sm font-bold text-text sm:text-right">
-              {selectedCount} بلوک انتخاب شده است
+        <div className="fixed bottom-8 left-1/2 z-[65] w-[calc(100%-2rem)] max-w-5xl -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in">
+          <div className="glass flex flex-col gap-4 rounded-2xl border border-[#ff00ea]/30 bg-background/95 p-3.5 sm:p-4 shadow-[0_0_35px_rgba(255,0,234,0.22)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-center text-sm font-bold text-text sm:text-right shrink-0 px-2 font-persian">
+              <span className="text-[#ff00ea] font-extrabold">{selectedCount}</span> بلوک انتخاب شده است
             </div>
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+            <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-7 flex-1 sm:max-w-3xl lg:max-w-4xl">
               <button
                 type="button"
                 onClick={selectAllBlocks}

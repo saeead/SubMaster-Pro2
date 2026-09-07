@@ -417,12 +417,15 @@ const App: React.FC = () => {
     showToast('فایل از پروژه حذف شد.', 'success');
   };
 
-  const updateBlock = (fileId: string, blockId: number, text: string) => {
+  const updateBlock = (fileId: string, blockId: number, text: string, field: 'translated' | 'original' = 'translated') => {
     setFiles(prev => prev.map(f => {
       if (f.id === fileId) {
         return {
           ...f,
-          blocks: f.blocks.map(b => b.id === blockId ? { ...b, translatedText: text } : b)
+          blocks: f.blocks.map(b => b.id === blockId ? { 
+            ...b, 
+            [field === 'original' ? 'originalText' : 'translatedText']: text 
+          } : b)
         };
       }
       return f;
@@ -439,16 +442,22 @@ const App: React.FC = () => {
 
   // --- UNDO / REDO LOGIC ---
 
-  const handleCommitChange = (blockId: number, oldText: string, newText: string) => {
+  const handleCommitChange = (
+    blockId: number, 
+    oldText: string, 
+    newText: string, 
+    field: 'translated' | 'original' = 'translated'
+  ) => {
       if (!activeFileId || oldText === newText) return;
 
       setFiles(prev => prev.map(f => {
           if (f.id === activeFileId) {
               const newHistory = f.modificationsMade.slice(0, f.historyPointer + 1);
+              const key = field === 'original' ? 'originalText' : 'translatedText';
               newHistory.push({
                   blockId,
-                  oldState: { translatedText: oldText },
-                  newState: { translatedText: newText },
+                  oldState: { [key]: oldText },
+                  newState: { [key]: newText },
                   timestamp: new Date().toISOString()
               });
               
@@ -669,13 +678,19 @@ const App: React.FC = () => {
 
   // --- BATCH ACTION LOGIC ---
 
-  const handleFindReplace = (find: string, replace: string, scope: 'current' | 'all') => {
+  const handleFindReplace = (
+    find: string, 
+    replace: string, 
+    scope: 'current' | 'all',
+    targetField: 'translated' | 'original' | 'both' = 'translated'
+  ) => {
     if (!find) return;
     let totalOccurrences = 0;
     const targetFiles = scope === 'all' ? files : files.filter(f => f.id === activeFileId);
     
     // Batch ID for Undo/Redo Grouping
     const groupId = crypto.randomUUID();
+    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     const updatedFiles = files.map(f => {
        if (!targetFiles.find(tf => tf.id === f.id)) return f;
@@ -684,21 +699,47 @@ const App: React.FC = () => {
        let fileOccurrences = 0;
        
        const newBlocks = f.blocks.map(block => {
-         if (block.translatedText && block.translatedText.includes(find)) {
-            const newText = block.translatedText.replaceAll(find, replace);
-            if (newText !== block.translatedText) {
-                fileOccurrences++;
-                
-                // Add to history
+         const checkTranslated = (targetField === 'translated' || targetField === 'both') && !!block.translatedText && block.translatedText.includes(find);
+         const checkOriginal = (targetField === 'original' || targetField === 'both') && !!block.originalText && block.originalText.includes(find);
+
+         if (checkTranslated || checkOriginal) {
+            const oldState: Partial<SubtitleBlock> = {};
+            const newState: Partial<SubtitleBlock> = {};
+            let updatedBlock = { ...block };
+
+            if (checkTranslated && block.translatedText) {
+               const newTrans = block.translatedText.replaceAll(find, replace);
+               if (newTrans !== block.translatedText) {
+                   const regex = new RegExp(escapeRegExp(find), 'g');
+                   const matches = block.translatedText.match(regex);
+                   fileOccurrences += matches ? matches.length : 1;
+                   oldState.translatedText = block.translatedText;
+                   newState.translatedText = newTrans;
+                   updatedBlock.translatedText = newTrans;
+               }
+            }
+
+            if (checkOriginal && block.originalText) {
+               const newOrig = block.originalText.replaceAll(find, replace);
+               if (newOrig !== block.originalText) {
+                   const regex = new RegExp(escapeRegExp(find), 'g');
+                   const matches = block.originalText.match(regex);
+                   fileOccurrences += matches ? matches.length : 1;
+                   oldState.originalText = block.originalText;
+                   newState.originalText = newOrig;
+                   updatedBlock.originalText = newOrig;
+               }
+            }
+
+            if (Object.keys(newState).length > 0) {
                 newHistory.push({
                     blockId: block.id,
-                    oldState: { translatedText: block.translatedText },
-                    newState: { translatedText: newText },
-                    groupId: groupId,
+                    oldState,
+                    newState,
+                    groupId,
                     timestamp: new Date().toISOString()
                 });
-
-                return { ...block, translatedText: newText };
+                return updatedBlock;
             }
          }
          return block;
@@ -715,7 +756,8 @@ const App: React.FC = () => {
 
     if (totalOccurrences > 0) {
       setFiles(updatedFiles);
-      showToast(`${totalOccurrences} مورد در ${scope === 'all' ? 'همه فایل‌ها' : 'فایل جاری'} جایگزین شد.`, 'success');
+      const targetLabel = targetField === 'original' ? 'متن اصلی (منبع STT)' : targetField === 'both' ? 'هر دو متن اصلی و ترجمه' : 'متن ترجمه';
+      showToast(`${totalOccurrences} مورد در ${targetLabel} (${scope === 'all' ? 'همه فایل‌ها' : 'فایل جاری'}) جایگزین شد.`, 'success');
     } else {
       showToast('موردی برای جایگزینی یافت نشد.', 'warning');
     }
@@ -1685,7 +1727,7 @@ const App: React.FC = () => {
                          <label className="text-sm font-bold text-text flex items-center gap-2"><Wand2 className="w-4 h-4 text-secondary" />پرامپت اختصاصی (Custom Prompt)</label>
                          <textarea value={settings.customPrompt} onChange={(e) => updateSettings({ customPrompt: e.target.value })} placeholder="دستورالعمل خاصی دارید؟ اینجا بنویسید..." className="w-full dark:bg-[#0a0e27]/60 bg-white text-sm text-text placeholder-text-muted focus:outline-none resize-none h-24 rounded-xl p-4 border dark:border-white/10 border-slate-200 focus:border-secondary/60 transition-all shadow-xs" dir="auto" />
                     </div>
-                    <SubtitleEditor blocks={getActiveFile().blocks} onUpdateBlock={(id, text) => activeFileId && updateBlock(activeFileId, id, text)} validationErrors={getActiveFile().netflixErrors} onFindReplace={handleFindReplace} hasMultipleFiles={files.length > 1} onCommitChange={handleCommitChange} onUndo={handleUndo} onRedo={handleRedo} canUndo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer > -1} canRedo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer < getActiveFile().modificationsMade.length - 1} onRetranslateSelected={handleRetranslateSelectedBlocks} onAutoFixSelected={handleAutoFixSelectedBlocks} onDeleteSelected={handleDeleteSelectedBlocks} isRetranslatingSelection={isRetranslatingSelection} activeTranslationBlockIds={getActiveFile().activeTranslationBlockIds || []} />
+                    <SubtitleEditor blocks={getActiveFile().blocks} onUpdateBlock={(id, text, field) => activeFileId && updateBlock(activeFileId, id, text, field)} validationErrors={getActiveFile().netflixErrors} onFindReplace={handleFindReplace} hasMultipleFiles={files.length > 1} onCommitChange={handleCommitChange} onUndo={handleUndo} onRedo={handleRedo} canUndo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer > -1} canRedo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer < getActiveFile().modificationsMade.length - 1} onRetranslateSelected={handleRetranslateSelectedBlocks} onAutoFixSelected={handleAutoFixSelectedBlocks} onDeleteSelected={handleDeleteSelectedBlocks} isRetranslatingSelection={isRetranslatingSelection} activeTranslationBlockIds={getActiveFile().activeTranslationBlockIds || []} />
                 </>
             )}
         </main>
