@@ -129,6 +129,7 @@ export const SKELETON_STR_SYSTEM_PROMPT = 'You are a professional subtitle trans
 export const SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION = `For Persian output, apply the Persian Academy's orthography consistently and rigorously:
 - Use the exact zero-width non-joiner character ZWNJ (U+200C) in all required compounds and affixes. NEVER use a regular space, hyphen (-), or tatweel (ـ) instead of ZWNJ.
 - Examples of mandatory ZWNJ usage: می‌رود، نمی‌دانم، کتاب‌ها، نوشته‌ام، بزرگ‌تر، مدرسه‌مان، دانش‌آموز، بهینه‌سازی، و فارسی‌زبان.
+- CRITICAL EXCEPTION (DO NOT OVER-APPLY): Do NOT insert ZWNJ mechanically into common colloquial continuous words or roots. Words like «میدن»، «نمیدن»، «نمیشه»، and «میزان» must be written solid without ANY space or ZWNJ.
 - Do not attach words without ZWNJ where required (e.g., write «بهینه‌تر» not «بهینهتر»). Do not leave them completely disconnected (e.g., write «می‌رود» not «می رود»).
 - Use standard Persian punctuation: no space before «،»، «؛»، «؟»، «!» or «.»; use exactly one regular space after punctuation.
 - Use standard Persian letters (ی and ک). Apply the correct میانجیِ ی in اضافه constructions when needed (e.g., خانه‌ی من).
@@ -144,6 +145,8 @@ export const normalizeSkeletonPersianHalfSpaces = (value: string): string => val
   .replace(/ي/g, 'ی')
   .replace(/ك/g, 'ک')
   .replace(/ـ+/g, PERSIAN_HALF_SPACE)
+  // Fix incorrectly inserted ZWNJ by models into colloquial continuous verbs and nouns
+  .replace(/(^|\s)(می|نمی)\u200C(شه|شن|شم|شی|شیم|شید|دن|دم|دی|دیم|دید|دین|زان)(?=\s|[.،؛!؟]|$)/gu, '$1$2$3')
   // Universal suffix rule for plurals and comparatives (very safe)
   .replace(/([\u0621-\u06CC])(?:\s|-|\u200C)+(ها|های|هایی|تر|ترین)(?=\s|[.،؛!؟]|$)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
   // Universal prefix rule for 'می' and 'نمی' with an expanded list of common verbs (safe)

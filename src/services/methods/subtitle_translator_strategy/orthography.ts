@@ -42,19 +42,20 @@ export const normalizeSubtitleTranslatorPersianHalfSpaces = (value: string): str
 
   let text = normalizePersianChars(value);
 
-  // 1. Verbal prefixes: می‌ and نمی‌ before present/past continuous verbs
-  // Matches "می" or "نمی" followed by space/hyphen/tatweel and any Persian word
-  // Excludes standalone "می" in contexts like "می ناب" or non-verbs
+  // 1. Fix incorrectly inserted ZWNJ by models into colloquial continuous verbs and nouns
   text = text.replace(
-    /(^|[\s«"'(])(ن?می)(?:\s|-|ـ|\u200C)*([ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیپ][ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]+)/gu,
-    (match, prefixBoundary, miPrefix, verbStem) => {
-      // Ignore false positives where "می" is part of another word or standalone noun
-      if (verbStem.length < 2) return match;
-      return `${prefixBoundary}${miPrefix}${PERSIAN_HALF_SPACE}${verbStem}`;
-    }
+    /(^|[\s«"'(])(ن?می)(?:\s|-|ـ|\u200C)*(شه|شن|شم|شی|شیم|شید|دن|دم|دی|دیم|دید|دین|زان|ذار|ذارین|رس|رسه)(?=[\s،؛؟!.)»"']|$)/gu,
+    '$1$2$3'
   );
 
-  // 2. Plural suffixes: ها، های، هایی، هایم، هایت، هایش، هایمان، هایتان، هایشان
+  // 2. Verbal prefixes: می‌ and نمی‌ before present/past continuous verbs
+  // Universal prefix rule for 'می' and 'نمی' with an expanded list of common standard verbs (safe)
+  text = text.replace(
+    /(^|[\s«"'(])(ن?می)(?:\s|-|ـ|\u200C)+(رود|روم|روی|رویم|روید|روند|رفت(?:م|ی|یم|ید|ند)?|دانم|دانی|داند|دانیم|دانید|دانند|دانست(?:م|ی|یم|ید|ند)?|شود|شوم|شوی|شویم|شوید|شوند|شد(?:م|ی|یم|ید|ند)?|توانم|توانی|تواند|توانیم|توانید|توانند|توانست(?:م|ی|یم|ید|ند)?|کنم|کنی|کند|کنیم|کنید|کنند|کرد(?:م|ی|یم|ید|ند)?|باشم|باشی|باشد|باشیم|باشید|باشند|بود(?:م|ی|یم|ید|ند)?|خواهم|خواهی|خواهد|خواهیم|خواهید|خواهند|خواست(?:م|ی|یم|ید|ند)?|بینم|بینی|بیند|بینیم|بینید|بینند|دید(?:م|ی|یم|ید|ند)?|گویم|گویی|گوید|گوییم|گویید|گویند|گفت(?:م|ی|یم|ید|ند)?|دهم|دهی|دهد|دهیم|دهید|دهند|داد(?:م|ی|یم|ید|ند)?|خورم|خوری|خورد|خوریم|خورید|خورند|خورد(?:م|ی|یم|ید|ند)?|زنم|زنی|زند|زنیم|زنید|زنند|زد(?:م|ی|یم|ید|ند)?|رسم|رسی|رسد|رسیم|رسید|رسند|رسید(?:م|ی|یم|ید|ند)?|خوانم|خوانی|خواند|خوانیم|خوانید|خوانند|خواند(?:م|ی|یم|ید|ند)?|آورم|آوری|آورد|آوریم|آورید|آورند|آورد(?:م|ی|یم|ید|ند)?|سازم|سازی|سازد|سازیم|سازید|سازند|ساخت(?:م|ی|یم|ید|ند)?|گیرم|گیری|گیرد|گیریم|گیرید|گیرند|گرفت(?:م|ی|یم|ید|ند)?)(?=[\s،؛؟!.)»"']|$)/gu,
+    `$1$2${PERSIAN_HALF_SPACE}$3`
+  );
+
+  // 3. Plural suffixes: ها، های، هایی، هایم، هایت، هایش، هایمان، هایتان، هایشان
   text = text.replace(
     /([ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی])(?:\s|-|ـ|\u200C)+(ها(?:یی|یم|یت|یش|مان|تان|شان|ی)?)(?=[\s،؛؟!.)»"']|$)/gu,
     `$1${PERSIAN_HALF_SPACE}$2`

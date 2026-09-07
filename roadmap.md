@@ -74,6 +74,7 @@ Pause و cancel فعلی loop را بعد از پایان request جاری مت�
 - تشخیص باقی‌ماندن زبان مبدأ بر اساس target language (انجام شده با هشدار Diagnostic).
 - scoring کیفیت و نمایش آن در UI (به صورت Lightweight Quality Diagnostic اضافه شد).
 - retry selective فقط برای idهای مشکل‌دار (انجام شده).
+- اصلاح خطاهای نگارشی مربوط به نیم‌فاصله‌های بی‌رویه و اشتباه در واژگان محاوره‌ای مانند «میدن»، «نمیشه» و «میزان» (Translation Quality – Half-space (ZWNJ) Orthography Fix).
 
 ### 9. پشتیبانی رسمی از target languageهای غیر فارسی [انجام شده]
 
