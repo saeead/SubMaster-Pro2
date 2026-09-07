@@ -88,8 +88,14 @@ const normalizeForAlignment = (value: string): string => value
 // Alignment may ignore invisible characters, but subtitle output must retain
 // the real U+200C character supplied by the model.
 const cleanTranslatedSlot = (value: string): string => value
+  // Remove markdown code fences and common markdown bold/italic if they wrap the entire line
+  .replace(/^```.*?[\r\n]+|[\r\n]+```$/g, '')
+  .replace(/^\*\*(.*?)\*\*$/g, '$1')
   .replace(/\[\/?(?:TRANSLATE(?:_\d+)?|TRANSLTranslate_\d+|CONTEXT)\]/g, '')
-  .replace(/^\s*[\[({«"']*\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*(?:--?>|<--|←|→)\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*[\])}»"']*\s*/g, '')
+  // Ignore leaked timestamps or cue numbers (e.g. 1\n00:00:00,000 --> ...)
+  .replace(/^\s*\d+\s*[\r\n]+\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*(?:--?>|<--|←|→)\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*[\r\n]*/, '')
+  .replace(/^\s*[\[({«"']*\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*(?:--?>|<--|←|→)\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*[\])}»"']*\s*/, '')
+  // Strip bounding quotes or brackets often added by models
   .replace(/^\s*[\[({«"']+|[\])}»"']+\s*$/g, '')
   .replace(/[\u200B\u200D\u2060\uFEFF]/g, '')
   // Some providers return an escaped line break in their raw tagged response.
@@ -120,11 +126,12 @@ export const buildContextPayload = (lines: string[], start: number, end: number,
 export const SKELETON_STR_SYSTEM_PROMPT = 'You are a professional subtitle translator. Respond only with the tagged lines. Do not add explanations, comments, markdown fences, or any extra text.';
 
 /** Persian-only writing rules for Skeleton STR model responses. */
-export const SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION = `For Persian output, apply the Persian Academy's orthography consistently:
-- Use the exact zero-width non-joiner character (U+200C), never a regular space, hyphen, or tatweel, in required compounds and affixes: می‌رود، نمی‌دانم، کتاب‌ها، نوشته‌ام، بزرگ‌تر، بهینه‌سازی، و فارسی‌زبان.
-- Do not remove an existing required U+200C or attach words without it; write neither «می رود» nor «بهینهتر».
-- Use standard Persian punctuation: no space before «،»، «؛»، «؟»، «!» or «.»; use one ordinary space after punctuation when another word follows.
-- Use Persian ی and ک, apply the correct میانجیِ ی in اضافه constructions when needed, and avoid extra or missing spaces.
+export const SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION = `For Persian output, apply the Persian Academy's orthography consistently and rigorously:
+- Use the exact zero-width non-joiner character ZWNJ (U+200C) in all required compounds and affixes. NEVER use a regular space, hyphen (-), or tatweel (ـ) instead of ZWNJ.
+- Examples of mandatory ZWNJ usage: می‌رود، نمی‌دانم، کتاب‌ها، نوشته‌ام، بزرگ‌تر، مدرسه‌مان، دانش‌آموز، بهینه‌سازی، و فارسی‌زبان.
+- Do not attach words without ZWNJ where required (e.g., write «بهینه‌تر» not «بهینهتر»). Do not leave them completely disconnected (e.g., write «می‌رود» not «می رود»).
+- Use standard Persian punctuation: no space before «،»، «؛»، «؟»، «!» or «.»; use exactly one regular space after punctuation.
+- Use standard Persian letters (ی and ک). Apply the correct میانجیِ ی in اضافه constructions when needed (e.g., خانه‌ی من).
 - Preserve these rules in every tagged line while keeping the subtitle concise and natural.`;
 
 /**
@@ -137,10 +144,16 @@ export const normalizeSkeletonPersianHalfSpaces = (value: string): string => val
   .replace(/ي/g, 'ی')
   .replace(/ك/g, 'ک')
   .replace(/ـ+/g, PERSIAN_HALF_SPACE)
-  .replace(/(می|نمی)(?:\s|\u200C)*(رود|دانم|دانی|داند|دانیم|دانید|دانند|شود|شوند|شوم|شویم|شوید|توانم|توانی|تواند|توانند|توانیم|توانید|کنم|کنی|کند|کنند|کنیم|کنید|باشم|باشی|باشد|باشند|باشیم|باشید)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
-  .replace(/(کتاب)(?:\s|-|ـ|\u200C)*(هایی|های|ها)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
-  .replace(/(بهینه|بزرگ|کوچک)(?:\s|-|ـ|\u200C)*(ترین|تر)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
-  .replace(/(برنامه|دست|کتاب|صفر|نیم|فارسی|بهینه)(?:\s|-|ـ|\u200C)*(نویس(?:ی)?|خانه|عرض|فاصله|زبان|سازی)/gu, `$1${PERSIAN_HALF_SPACE}$2`);
+  // Universal suffix rule for plurals and comparatives (very safe)
+  .replace(/([\u0621-\u06CC])(?:\s|-|\u200C)+(ها|های|هایی|تر|ترین)(?=\s|[.،؛!؟]|$)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
+  // Universal prefix rule for 'می' and 'نمی' with an expanded list of common verbs (safe)
+  .replace(/(^|\s)(می|نمی)(?:\s|-|\u200C)+(رود|روم|روی|رویم|روید|روند|رفت(?:م|ی|یم|ید|ند)?|دانم|دانی|داند|دانیم|دانید|دانند|دانست(?:م|ی|یم|ید|ند)?|شود|شوم|شوی|شویم|شوید|شوند|شد(?:م|ی|یم|ید|ند)?|توانم|توانی|تواند|توانیم|توانید|توانند|توانست(?:م|ی|یم|ید|ند)?|کنم|کنی|کند|کنیم|کنید|کنند|کرد(?:م|ی|یم|ید|ند)?|باشم|باشی|باشد|باشیم|باشید|باشند|بود(?:م|ی|یم|ید|ند)?|خواهم|خواهی|خواهد|خواهیم|خواهید|خواهند|خواست(?:م|ی|یم|ید|ند)?|بینم|بینی|بیند|بینیم|بینید|بینند|دید(?:م|ی|یم|ید|ند)?|گویم|گویی|گوید|گوییم|گویید|گویند|گفت(?:م|ی|یم|ید|ند)?|دهم|دهی|دهد|دهیم|دهید|دهند|داد(?:م|ی|یم|ید|ند)?|خورم|خوری|خورد|خوریم|خورید|خورند|خورد(?:م|ی|یم|ید|ند)?|زنم|زنی|زند|زنیم|زنید|زنند|زد(?:م|ی|یم|ید|ند)?|رسم|رسی|رسد|رسیم|رسید|رسند|رسید(?:م|ی|یم|ید|ند)?|خوانم|خوانی|خواند|خوانیم|خوانید|خوانند|خواند(?:م|ی|یم|ید|ند)?|آورم|آوری|آورد|آوریم|آورید|آورند|آورد(?:م|ی|یم|ید|ند)?|سازم|سازی|سازد|سازیم|سازید|سازند|ساخت(?:م|ی|یم|ید|ند)?|گیرم|گیری|گیرد|گیریم|گیرید|گیرند|گرفت(?:م|ی|یم|ید|ند)?)(?=\s|[.،؛!؟]|$)/gu, `$1$2${PERSIAN_HALF_SPACE}$3`)
+  // Specific common compound words
+  .replace(/(برنامه|دست|کتاب|صفر|نیم|فارسی|بهینه|دانش|فوق|عکس|بین|هیچ|روان|هم)(?:\s|-|\u200C)+(نویس(?:ی)?|خانه|عرض|فاصله|زبان|سازی|آموز|العاده|العمل|المللی|کدام|شناس|کار|وطن|کلاسی|تیمی|خانواده)(?=\s|[.،؛!؟]|$)/gu, `$1${PERSIAN_HALF_SPACE}$2`)
+  // Cleanup multiple half-spaces or adjacent spaces
+  .replace(/\u200C{2,}/g, PERSIAN_HALF_SPACE)
+  .replace(/\s\u200C/g, ' ')
+  .replace(/\u200C\s/g, ' ');
 const TARGET_LANGUAGE_NAMES: Record<string, string> = {
   fa: 'Persian (Farsi)', en: 'English', ru: 'Russian', zh: 'Chinese', de: 'German', es: 'Spanish'
 };
@@ -154,12 +167,12 @@ export const buildSkeletonUserPrompt = (content: string, count: number, targetLa
 CRITICAL REQUIREMENTS:
 1. You MUST translate ALL ${count} lines marked with [TRANSLATE_X] tags into ${language}; never return an empty tag and never leave a requested marker untranslated
 2. ${markerRequirement}
-3. Keep the exact same marker IDs in the exact format: [TRANSLATE_X]translation[/TRANSLATE_X]
-4. NEVER merge lines; retain one tag per source line.
-5. Preserve the complete meaning of every line, but keep each subtitle concise and balanced for its timestamp duration. Do not summarize, omit details, or move content between tags; also do not overfill one tag while leaving another too short or empty.
-6. Maintain seamless boundary continuity and grammar stitching with preceding [CONTEXT] lines: if the first [TRANSLATE_X] line continues a clause or sentence from an existing translation in [CONTEXT], match its verb tense, pronouns, and tone so the speech flows continuously without disjointed breaks.
-7. Perform translation and quality review in this single request: before responding, internally verify every tagged output for target-language fluency, timing-appropriate subtitle length, terminology consistency, and no source-text leakage. Do not make a second pass or ask for another request.
-8. If a source line includes a leading timestamp hint such as {00:00:01,000 --> 00:00:03,000}, use it only to fit subtitle length and context; do not include the timestamp hint in the translated text.
+3. STRICT OUTPUT FORMAT: Keep the exact same marker IDs in the exact format: [TRANSLATE_X]translation[/TRANSLATE_X]. Do NOT wrap the output in markdown blocks, JSON, or any other structure.
+4. NEVER merge lines; retain exactly one translation tag per source line tag. Do not invent new tags.
+5. Preserve the complete meaning of every line, but keep each subtitle concise and balanced for its timestamp duration. Do not summarize, omit details, or move content between tags.
+6. STITCHING & CONTINUITY: If the first [TRANSLATE_X] line continues a clause or sentence from an existing translation in the preceding [CONTEXT] lines, you MUST stitch them seamlessly. Match the exact verb tense, pronouns, terminology, and tone of the [CONTEXT] so the speech flows continuously without abrupt grammatical breaks.
+7. Perform translation and quality review in this single request: before responding, internally verify every tagged output for target-language fluency, timing-appropriate subtitle length, terminology consistency, and no source-text leakage.
+8. If a source line includes a leading timestamp hint such as {00:00:01,000 --> 00:00:03,000}, use it only to fit subtitle length and context; do not include the timestamp hint or cue numbers in the translated text.
 9. Do not answer in English unless English is the selected target language.
 
 ${content}`;

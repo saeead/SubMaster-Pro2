@@ -5,7 +5,7 @@ import { APP_CONFIG, DEFAULT_GEMINI_MODEL, getResolvedGeminiModel, getSystemInst
 import { SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION } from "./methods/skeleton_str";
 import { getSubtitleTranslatorSystemInstruction } from "./methods/subtitle_translator_strategy";
 import { filterBatchWithMemory, addBatchToMemory } from "./translationMemory";
-import { getStandardLimits, checkCueStandardCompliance, SubtitleComplianceIssue } from "./subtitleUtils";
+import { getStandardLimits, checkCueStandardCompliance, SubtitleComplianceIssue, estimateTranslationQuality, LightweightQualityDiagnostic } from "./subtitleUtils";
 
 interface GeminiCacheEntry {
   cacheName: string;
@@ -613,11 +613,15 @@ These subtitle blocks were already translated, but the user rejected their quali
 PAST CONTEXT (reference only; do not return these IDs):
 ${contextPre.length ? toMarkedSubtitleParagraph(contextPre) : 'N/A'}
 
+MANDATORY REVIEW: Before generating translations, you MUST review PAST CONTEXT to actively lock onto previously established character names, pronouns, gender markers, and key terminology. Prefer previously used translations when they appear in PAST CONTEXT.
+
 TARGET BLOCKS TO RETRANSLATE:
 ${toSelectedRetranslationItems(targetBatch)}
 
 FUTURE CONTEXT (reference only; do not return these IDs):
 ${contextPost.length ? toMarkedSubtitleParagraph(contextPost) : 'N/A'}
+
+MANDATORY LOOK-AHEAD: Use FUTURE CONTEXT to resolve ambiguities in TARGET BLOCKS (e.g. unknown pronouns, split sentences).
 
 Retranslation goals:
 - Use Previous Persian only as a reference; freely improve it when it is incomplete, awkward, inconsistent, too literal, or machine-like.
@@ -962,6 +966,8 @@ ${JSON.stringify(contextPre)}
 CRITICAL BOUNDARY CONTINUITY & SEAMLESS STITCHING:
 - The items in PAST CONTEXT (last 3+ subtitle cues with their existing translations) immediately precede TARGET BATCH in dialogue.
 - Study these previous translations carefully to maintain strict consistency in topic, narrative thread, terminology, character names, formal/colloquial tone, and pronoun gender. Do NOT lose the train of thought or diverge from the established context.
+- MANDATORY REVIEW: Before generating translations, you MUST review PAST CONTEXT and actively lock onto previously established character names, pronouns, gender markers, and key terminology.
+- You MUST prefer previously used translations for the same concepts, names, or terminology when they appear in PAST CONTEXT.
 - If the first item of TARGET BATCH continues a sentence, clause, or conversational thought from the last items of PAST CONTEXT, you MUST ensure that its grammar, verb tense, pronouns, and tone connect seamlessly without abrupt cuts or grammatical orphans.`;
     }
     prompt += `
@@ -971,7 +977,10 @@ ${JSON.stringify(targetBatch)}`;
     if (contextPost.length > 0) prompt += `
 
 FUTURE CONTEXT (Study for flow):
-${JSON.stringify(contextPost)}`;
+${JSON.stringify(contextPost)}
+
+MANDATORY LOOK-AHEAD:
+- Use FUTURE CONTEXT to resolve ambiguities in TARGET BATCH (e.g. unknown pronouns, split sentences, interrupted dialogue, tone shifts).`;
     if (provider === 'lm_studio') {
       prompt += `
 FEW-SHOT EXAMPLES (Strictly follow this JSON structure and high-standard Persian translation):
@@ -1025,7 +1034,9 @@ ${toMarkedSubtitleParagraph(contextPre)}
 
 CRITICAL BOUNDARY CONTINUITY & SEAMLESS STITCHING:
 - The cues in PAST CONTEXT (last 3+ subtitle cues with their existing translations) immediately precede the first cue of TARGET MARKED PARAGRAPH.
-- Study these previous translations carefully to maintain strict consistency in topic, narrative thread, character names, formal/colloquial tone, and pronoun gender. Do NOT lose the train of thought.
+- Study these previous translations carefully to maintain strict consistency in topic, narrative thread, character names, formal/colloquial tone, terminology, and pronoun gender. Do NOT lose the train of thought.
+- MANDATORY REVIEW: Before generating translations, you MUST review PAST CONTEXT and actively lock onto previously established character names, pronouns, gender markers, and key terminology.
+- You MUST prefer previously used translations for the same concepts, names, or terminology when they appear in PAST CONTEXT.
 - If the first target cue continues a sentence, clause, or thought from the last cue, stitch it seamlessly with matching grammar, person/pronouns, and tone.
 `;
   }
@@ -1037,6 +1048,9 @@ ${toMarkedSubtitleParagraph(targetBatch)}
     prompt += `
 FUTURE CONTEXT (reference only; do not translate these IDs):
 ${toMarkedSubtitleParagraph(contextPost)}
+
+MANDATORY LOOK-AHEAD:
+- Use FUTURE CONTEXT to resolve ambiguities in TARGET MARKED PARAGRAPH (e.g. unknown pronouns, split sentences, interrupted dialogue, tone shifts).
 `;
   }
   prompt += `
@@ -1398,7 +1412,7 @@ export const translateBatch = async (
         effectivePre = [...contextPre, ...priorCompleted].slice(-GEMINI_CONTEXT_PRE_WINDOW);
       }
 
-      const userPrompt = buildContextualTranslationPrompt(
+      let userPrompt = buildContextualTranslationPrompt(
         activeBatch,
         effectivePre,
         contextPost,
@@ -1408,6 +1422,12 @@ export const translateBatch = async (
         settings.doNotTranslateTerms,
         settings.aiProvider
       );
+
+      if (validationRetries > 0) {
+        userPrompt += `\n\nCRITICAL RETRY NOTICE: Your previous response was REJECTED because it was malformed (invalid JSON, missing IDs, or empty translations).
+You MUST return ONLY a strictly valid JSON array: [{"id": number, "translatedText": "..."}].
+Do NOT wrap the output in markdown code blocks (\`\`\`json). Do NOT add explanations or preamble. Just the raw JSON array.`;
+      }
 
       const systemInstruction = getSystemInstruction(
         settings.tone, 

@@ -13,7 +13,7 @@ import { GlossaryModal } from './components/GlossaryModal';
 import { TextTranslatorModal } from './components/TextTranslatorModal';
 import { Toast, ToastType } from './components/Toast';
 import { SubtitleBlock, AppStatus, BatchRequest, BatchResponse, AppSettings, AdjustmentConfig, StyleConfig, GlossaryItem, SubtitleFile, Modification, TranslationDiagnostic } from './types';
-import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking } from './services/subtitleUtils';
+import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking, estimateTranslationQuality } from './services/subtitleUtils';
 import { translateBatch, diagnoseConnection, retranslateSelectedBlocks, getTranslationDiagnostic, translateSkeletonPayload, ensureFreshGeminiFlashModels, isAbortError } from './services/geminiService';
 import { buildSkeletonUserPrompt, extractTranslatedLinesByMarkerIds, normalizeSkeletonPersianHalfSpaces } from './services/methods/skeleton_str';
 import { buildSubtitleTranslatorUserPrompt, extractTranslatedLinesByMarkerIds as extractSubtitleTranslatorLinesByMarkerIds, normalizeSubtitleTranslatorPersianHalfSpaces } from './services/methods/subtitle_translator_strategy';
@@ -1236,6 +1236,25 @@ const App: React.FC = () => {
                                 }
                             }
                         });
+                        
+                        // Run non-blocking quality estimation
+                        const evalCues = results.map(res => {
+                          const cue = newBlocks.find(b => b.id === res.id);
+                          return { id: res.id, sourceText: cue?.originalText || '', translatedText: res.translatedText };
+                        });
+                        const qualityDiagnostics = estimateTranslationQuality(evalCues, settingsRef.current.targetLanguage);
+                        qualityDiagnostics.forEach(d => {
+                           const diagnostic: TranslationDiagnostic = {
+                              code: 'QUALITY_WARNING',
+                              severity: 'warning',
+                              title: 'Translation Quality Hint',
+                              cause: d.issue,
+                              recovery: 'Review the block manually to ensure correctness.',
+                              timestamp: new Date().toISOString()
+                           };
+                           setTimeout(() => showDiagnosticToast(diagnostic), 100);
+                        });
+
                         return { ...f, blocks: newBlocks };
                     }
                     return f;

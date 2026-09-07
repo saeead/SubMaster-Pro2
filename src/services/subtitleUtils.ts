@@ -697,6 +697,52 @@ export interface SubtitleComplianceIssue {
   issues: string[];
 }
 
+export interface LightweightQualityDiagnostic {
+  cueId: number;
+  issue: string;
+}
+
+export const estimateTranslationQuality = (
+  cues: { id: number; sourceText: string; translatedText: string }[],
+  targetLanguage: TargetLanguage = 'fa'
+): LightweightQualityDiagnostic[] => {
+  const diagnostics: LightweightQualityDiagnostic[] = [];
+  
+  for (const cue of cues) {
+    const cleanTranslated = cue.translatedText.trim();
+    if (!cleanTranslated) {
+      diagnostics.push({ cueId: cue.id, issue: "Translation is empty" });
+      continue;
+    }
+
+    const sourceLen = cue.sourceText.length;
+    const transLen = cleanTranslated.length;
+
+    // Check for extreme length deviation (e.g. model summarized heavily or hallucinated)
+    // Only flag if source is substantial enough to evaluate.
+    if (sourceLen > 15) {
+       if (transLen < sourceLen * 0.25) {
+         diagnostics.push({ cueId: cue.id, issue: "Suspiciously short: possible summarization or omission" });
+       } else if (transLen > sourceLen * 2.5) {
+         diagnostics.push({ cueId: cue.id, issue: "Suspiciously long: possible hallucination or over-explanation" });
+       }
+    }
+
+    // Check for obvious source leakage if target is not english
+    if (targetLanguage !== 'en') {
+      const englishWordPattern = /\b[A-Za-z]{4,}\b/g; // Look for english words >= 4 letters
+      const englishMatches = cleanTranslated.match(englishWordPattern);
+      if (englishMatches && englishMatches.length > 2) {
+        // Simple heuristic: if there are multiple english words, it might be leaking
+        // This is a rough estimation.
+        diagnostics.push({ cueId: cue.id, issue: "Possible source language leakage detected" });
+      }
+    }
+  }
+
+  return diagnostics;
+};
+
 export const checkCueStandardCompliance = (
   cue: { id: number; text: string; startTime?: string; endTime?: string },
   translatedText: string,
