@@ -70,10 +70,10 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose}></div>
       
-      <div className="relative w-full max-w-5xl glass rounded-3xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col h-[85vh] shadow-2xl">
+      <div className="relative w-full max-w-5xl glass dark:bg-[#0c1232] bg-white rounded-3xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col h-[85vh] shadow-2xl border dark:border-white/10 border-slate-200">
         
         {/* Header Section */}
-        <div className="px-6 py-4 border-b dark:border-white/10 border-slate-200 dark:bg-[#0a0e27]/80 bg-white/95 flex justify-between items-center z-20">
+        <div className="px-6 py-4 border-b dark:border-white/10 border-slate-200 dark:bg-[#0a0e27] bg-white/95 flex justify-between items-center z-20">
           <div className="flex items-center gap-3">
              <div className="bg-gradient-to-br from-[#00f0ff]/20 to-[#00f0ff]/5 p-2.5 rounded-xl border border-[#00f0ff]/20 shadow-[0_0_15px_rgba(0,240,255,0.1)]">
                 <Languages className="w-5 h-5 text-primary" />
@@ -89,12 +89,12 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
         </div>
 
         {/* Toolbar & Controls */}
-        <div className="dark:bg-[#0a0e27]/40 bg-slate-50 border-b dark:border-white/5 border-slate-200 px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4 z-10">
+        <div className="dark:bg-[#0e163b] bg-slate-50 border-b dark:border-white/10 border-slate-200 px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4 z-10">
             
             {/* Language Flow */}
-            <div className="flex items-center gap-3 dark:bg-[#0a0e27] bg-white p-1.5 rounded-2xl border dark:border-white/10 border-slate-200 shadow-xs w-full md:w-auto justify-center md:justify-start">
+            <div className="flex items-center gap-3 dark:bg-[#080d24] bg-white p-1.5 rounded-2xl border dark:border-white/10 border-slate-200 shadow-xs w-full md:w-auto justify-center md:justify-start">
                 {/* Source Label */}
-                <div className="px-4 py-2 rounded-xl dark:bg-white/5 bg-slate-100 dark:text-white/60 text-slate-700 text-xs font-bold border dark:border-white/5 border-slate-200 cursor-default select-none">
+                <div className="px-4 py-2 rounded-xl dark:bg-white/5 bg-slate-100 dark:text-white/70 text-slate-700 text-xs font-bold border dark:border-white/5 border-slate-200 cursor-default select-none">
                     تشخیص خودکار
                 </div>
 
@@ -122,7 +122,7 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
             </div>
 
             {/* Context Info */}
-            <div className="hidden md:flex items-center gap-3 text-[10px] text-text-muted dark:bg-white/5 bg-white px-4 py-2 rounded-full border dark:border-white/5 border-slate-200 shadow-xs">
+            <div className="hidden md:flex items-center gap-3 text-[10px] text-text-muted dark:bg-[#080d24] bg-white px-4 py-2 rounded-full border dark:border-white/10 border-slate-200 shadow-xs">
                  <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                     {TONE_OPTIONS[settings.tone]}
@@ -136,14 +136,14 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
         </div>
 
         {/* Main Workspace */}
-        <div className="flex-1 flex flex-col md:flex-row p-6 gap-4 md:gap-6 overflow-hidden dark:bg-gradient-to-b dark:from-[#0a0e27]/50 dark:to-[#0a0e27] bg-slate-100/70 relative">
+        <div className="flex-1 flex flex-col md:flex-row p-6 gap-4 md:gap-6 overflow-hidden dark:bg-[#070b22] bg-slate-100/70 relative">
             
             {/* Translate Button (Floating Center on Desktop) */}
             <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30">
                  <button 
                     onClick={handleTranslate}
                     disabled={isTranslating || !inputText.trim()}
-                    className="group relative flex items-center justify-center w-14 h-14 rounded-2xl dark:bg-[#0a0e27] bg-white border border-primary/30 text-primary shadow-lg hover:shadow-xl hover:scale-110 hover:border-primary transition-all disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
+                    className="group relative flex items-center justify-center w-14 h-14 rounded-2xl dark:bg-[#0d163d] bg-white border border-primary/40 text-primary shadow-lg hover:shadow-xl hover:scale-110 hover:border-primary transition-all disabled:opacity-50 disabled:scale-100 disabled:shadow-none cursor-pointer"
                  >
                      <div className="absolute inset-0 bg-primary/10 rounded-2xl blur-md group-hover:bg-primary/20 transition-all"></div>
                      {isTranslating ? <Loader2 className="w-6 h-6 animate-spin relative z-10" /> : <Sparkles className="w-6 h-6 relative z-10 group-hover:rotate-12 transition-transform" />}
@@ -151,17 +151,17 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
             </div>
 
             {/* Input Panel */}
-            <div className="flex-1 flex flex-col h-full dark:bg-surface/50 bg-white rounded-2xl border dark:border-white/10 border-slate-200 shadow-xs overflow-hidden transition-all focus-within:border-primary/50 group">
+            <div className="flex-1 flex flex-col h-full dark:bg-[#0a0f2b] bg-white rounded-2xl border dark:border-white/10 border-slate-200 shadow-xs overflow-hidden transition-all focus-within:border-primary/50 group">
                 <textarea 
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder="متن خود را اینجا بنویسید..."
                     dir="auto"
-                    className="flex-1 w-full bg-transparent p-5 text-sm text-text focus:outline-none resize-none leading-8 custom-scrollbar placeholder:text-text-muted/50"
+                    className="flex-1 w-full bg-transparent p-5 text-sm dark:text-white text-slate-900 focus:outline-none resize-none leading-8 custom-scrollbar placeholder:dark:text-white/30 placeholder:text-slate-400"
                 />
                 
                 {/* Input Footer Actions */}
-                <div className="px-4 py-3 dark:bg-[#0a0e27]/30 bg-slate-50 border-t dark:border-white/5 border-slate-200 flex justify-between items-center">
+                <div className="px-4 py-3 dark:bg-[#080d26] bg-slate-50 border-t dark:border-white/10 border-slate-200 flex justify-between items-center">
                      <span className="text-[10px] text-text-muted font-mono">
                         {inputText.length} chars
                      </span>
@@ -201,7 +201,7 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
             </div>
 
             {/* Output Panel */}
-            <div className={`flex-1 flex flex-col h-full dark:bg-surface/50 bg-white rounded-2xl border overflow-hidden transition-all relative ${outputText ? 'border-secondary/40 shadow-xs' : 'dark:border-white/10 border-slate-200 border-dashed'}`}>
+            <div className={`flex-1 flex flex-col h-full dark:bg-[#0a0f2b] bg-white rounded-2xl border overflow-hidden transition-all relative ${outputText ? 'border-secondary/40 shadow-xs' : 'dark:border-white/10 border-slate-200 border-dashed'}`}>
                 {isTranslating ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-text-muted gap-3">
                          <Loader2 className="w-8 h-8 animate-spin text-secondary" />
@@ -217,19 +217,19 @@ export const TextTranslatorModal: React.FC<TextTranslatorModalProps> = ({ isOpen
                         readOnly
                         value={outputText}
                         dir="auto"
-                        className="flex-1 w-full bg-transparent p-5 text-sm text-text focus:outline-none resize-none leading-8 custom-scrollbar"
+                        className="flex-1 w-full bg-transparent p-5 text-sm dark:text-white text-slate-900 focus:outline-none resize-none leading-8 custom-scrollbar"
                     />
                 )}
 
                 {/* Output Footer Actions */}
-                <div className="px-4 py-3 dark:bg-[#0a0e27]/30 bg-slate-50 border-t dark:border-white/5 border-slate-200 flex justify-between items-center">
+                <div className="px-4 py-3 dark:bg-[#080d26] bg-slate-50 border-t dark:border-white/10 border-slate-200 flex justify-between items-center">
                      <span className="text-[10px] text-text-muted font-mono">
                         {outputText ? `${outputText.length} chars` : ''}
                      </span>
                      {outputText && (
                         <button 
                             onClick={handleCopy}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${copied ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'dark:bg-white/5 bg-slate-100 text-text border-slate-200 dark:border-white/10 hover:bg-slate-200'}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${copied ? 'bg-green-500/15 text-green-400 border-green-500/30' : 'dark:bg-white/5 bg-slate-100 dark:text-white text-slate-700 border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10'}`}
                         >
                             {copied ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                             {copied ? 'کپی شد' : 'کپی'}
