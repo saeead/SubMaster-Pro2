@@ -75,6 +75,7 @@ Pause و cancel فعلی loop را بعد از پایان request جاری مت�
 - scoring کیفیت و نمایش آن در UI (به صورت Lightweight Quality Diagnostic اضافه شد).
 - retry selective فقط برای idهای مشکل‌دار (انجام شده).
 - اصلاح خطاهای نگارشی مربوط به نیم‌فاصله‌های بی‌رویه و اشتباه در واژگان محاوره‌ای مانند «میدن»، «نمیشه» و «میزان» (Translation Quality – Half-space (ZWNJ) Orthography Fix).
+- درونی‌سازی قوانین کامل `persian-writing` (از جمله De-AI-ing) و اصلاح تبدیل اشتباه فواصل کامل به نیم‌فاصله در عباراتی نظیر «که بخش» و «هم در مورد» (Translation Quality – Half-space (ZWNJ) Orthography Fix v2).
 
 ### 9. پشتیبانی رسمی از target languageهای غیر فارسی [انجام شده]
 

@@ -82,24 +82,56 @@ export const normalizeSubtitleTranslatorPersianHalfSpaces = (value: string): str
   );
 
   // 5. Negative and continuous prefixes: بی‌ (without), هم‌ (co-), پیش‌ (pre-)
+  // We use strict whitelists for the second part to avoid false positives (e.g., "هم در", "هم بر")
+  const biWhitelist = 'نهایت|حوصله|دلیل|خود|جهت|جا|مورد|سابقه|نظیر|شمار|پایان|باک|گناه|نقص|دقت|توجه|اهمیت|ارزش|معنی|مفهوم|نتیجه|تاثیر|اثر|دفاع|پناه|کس|نام|نشان|نیاز|دغدغه|مزه|رنگ|بو|صدا';
+  const hamWhitelist = 'کار|وطن|کلاسی|بازی|سر|راه|سایه|تیمی|خانواده|خانه|دل|صدا|فکر|درد|رزم|سنگر|شهری|دوره|قطار|مسیر|سفر|کاران|وطنان|کلاسی‌ها|بازی‌ها|سفران';
+  const pishWhitelist = 'بینی|فرض|نیاز|کسوت|رو|گام|گفتار|نویس|زمینه|رفت|آمد|برد|نهاد|قدم|تاز|تازانه';
+  const barWhitelist = 'خورد|گزار|نامه|رسی|آورد|انگیز|طرف|قرار|پا|خاست|گشت|گردان';
+  
   text = text.replace(
-    /(^|[\s«"'(])(بی|هم|پیش|نیم|فرا|فرو|بر)(?:\s|-|ـ|\u200C)+([ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]{2,})/gu,
-    (match, boundary, prefix, baseWord) => {
-      // Exclude prepositions or non-compound words (e.g. "هم او", "هم این")
-      if (prefix === 'هم' && ['او', 'این', 'آن', 'چنین', 'چنان', 'همه'].includes(baseWord)) {
-        return match;
-      }
-      if (prefix === 'بر' && ['روی', 'اساس', 'سر', 'پای', 'تن'].includes(baseWord)) {
-        return match;
-      }
-      return `${boundary}${prefix}${PERSIAN_HALF_SPACE}${baseWord}`;
-    }
+    new RegExp(`(^|[\\s«"'(])(بی)(?:\\s|-|ـ|\\u200C)+(${biWhitelist})(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1$2${PERSIAN_HALF_SPACE}$3`
+  );
+  text = text.replace(
+    new RegExp(`(^|[\\s«"'(])(هم)(?:\\s|-|ـ|\\u200C)+(${hamWhitelist})(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1$2${PERSIAN_HALF_SPACE}$3`
+  );
+  text = text.replace(
+    new RegExp(`(^|[\\s«"'(])(پیش)(?:\\s|-|ـ|\\u200C)+(${pishWhitelist})(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1$2${PERSIAN_HALF_SPACE}$3`
+  );
+  text = text.replace(
+    new RegExp(`(^|[\\s«"'(])(بر)(?:\\s|-|ـ|\\u200C)+(${barWhitelist})(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1$2${PERSIAN_HALF_SPACE}$3`
   );
 
   // 6. Compound nouns and specialized roots:
-  // نویسی، سازی، ریزی، پذیری، پذیری، شناسی، یابی، مندی، مندان، بخشی
+  // We use strict whitelists for the first part to avoid false positives (e.g., "که بخش", "کسب‌وکار بخش")
+  const bakhshWhitelist = 'اثر|امید|الهام|لذت|رضایت|آرام|شفا|نجات|توان|ثمر|توان|الهام|شادی|غرور|حیات|روح|نیرو|جهان';
+  const saziWhitelist = 'بهینه|پیاده|مستند|آماده|ایمن|زیبا|باز|رها|انبوه|شبیه|مکان|زمان|استاندارد|فرهنگ|قطعه|آگاه|روان|ذخیره';
+  const nevisiWhitelist = 'برنامه|فیلم|نمایشنامه|داستان|کد|رمان|مقاله|گزارش|خبر|پایان|وبلاگ|متن';
+  const shenasiWhitelist = 'روان|جامعه|زیست|زمین|هوا|میکروب|انسان|گیاه|جانور|خون|بیماری|مکان|زمان|کیهان|جرم|زبان|نشان';
+  
   text = text.replace(
-    /([ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]{2,})(?:\s|-|ـ|\u200C)+(نویس(?:ی)?|ساز(?:ی)?|ریز(?:ی)?|پذیر(?:ی)?|شناس(?:ی)?|یاب(?:ی)?|مند(?:ی|ان)?|بخش(?:ی)?|نما|طلب(?:ی)?|خواه(?:ی)?|پرداز(?:ی)?|آمیز|انگیز)(?=[\s،؛؟!.)»"']|$)/gu,
+    new RegExp(`(${bakhshWhitelist})(?:\\s|-|ـ|\\u200C)+(بخش(?:ی)?)(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1${PERSIAN_HALF_SPACE}$2`
+  );
+  text = text.replace(
+    new RegExp(`(${saziWhitelist})(?:\\s|-|ـ|\\u200C)+(ساز(?:ی)?)(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1${PERSIAN_HALF_SPACE}$2`
+  );
+  text = text.replace(
+    new RegExp(`(${nevisiWhitelist})(?:\\s|-|ـ|\\u200C)+(نویس(?:ی)?|نویسان)(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1${PERSIAN_HALF_SPACE}$2`
+  );
+  text = text.replace(
+    new RegExp(`(${shenasiWhitelist})(?:\\s|-|ـ|\\u200C)+(شناس(?:ی|ان)?)(?=[\\s،؛؟!.)»"']|$)`, 'gu'),
+    `$1${PERSIAN_HALF_SPACE}$2`
+  );
+
+  // General safe suffix combinations
+  text = text.replace(
+    /([ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]{3,})(?:\s|-|ـ|\u200C)+(پذیر(?:ی)?|یاب(?:ی)?|طلب(?:ی)?|خواه(?:ی)?|پرداز(?:ی)?|آمیز|انگیز)(?=[\s،؛؟!.)»"']|$)/gu,
     `$1${PERSIAN_HALF_SPACE}$2`
   );
 
