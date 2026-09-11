@@ -635,108 +635,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
 
               {/* Gemini-only model selection */}
               <div className="space-y-4">
-                 <div className="flex items-center justify-between">
-                     <div className="flex items-center gap-2">
-                         <label className="text-sm text-white/90 block font-bold">انتخاب مدل پردازشی Gemini</label>
-                         <HelpTooltip 
-                              text="مدل‌های پردازشی بر اساس معماری رسمی مخزن gemini-skills تنظیم شده‌اند: Gemini 3.8 Flash برای تسک‌های استاندارد متنی، Gemini 3.1 Pro برای استدلال عمیق (پولی)، Gemini Flash Latest به عنوان نام مستعار خودکار، و Gemini 3.1 Flash Lite برای پردازش سبک و فوق‌سریع." 
-                              position="bottom"
-                         />
-                     </div>
-                     <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/30 font-mono">
-                       پیش‌فرض: {APP_CONFIG.geminiModels.standard}
-                     </span>
+                 <div className="flex items-center gap-2">
+                     <label className="text-sm text-text block font-bold">انتخاب مدل پردازشی</label>
+                     <HelpTooltip 
+                           text="مدل‌های Gemini 3 دارای قابلیت‌های ایجنتی و درک محیطی بالاتری هستند. مدل‌های 2.5 Pro برای استدلال‌های پیچیده ایده‌آل می‌باشند." 
+                           position="bottom"
+                     />
                  </div>
                  
                  <div className="grid grid-cols-1 gap-3">
                     
-                    {/* Standard (Latest Flash - Free & Fast Default) */}
+                    {/* Standard (3.0 Flash) */}
                     <div 
                       onClick={() => updateSettings({ model: 'standard' })}
                       className={`
-                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3 relative overflow-hidden
+                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3
                           ${settings.model === 'standard' 
                               ? 'bg-[#00f0ff]/10 border-[#00f0ff] shadow-[0_0_15px_rgba(0,240,255,0.15)]' 
-                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                              : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 hover:border-primary/40'
                           }
                       `}
                     >
-                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${settings.model === 'standard' ? 'border-[#00f0ff]' : 'border-white/30'}`}>
+                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center ${settings.model === 'standard' ? 'border-[#00f0ff]' : 'border-slate-400 dark:border-white/30'}`}>
                             {settings.model === 'standard' && <div className="w-2 h-2 rounded-full bg-[#00f0ff]" />}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-white font-medium text-sm">پیش‌فرض هوشمند (Gemini 3.8 Flash)</h3>
-                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
-                              توصیه گوگل (سریع و رایگان)
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            مدل رسمی و پیشنهادی مخزن gemini-skills برای تسک‌های استاندارد متنی و زیرنویس؛ هماهنگی کامل با لحن محاوره‌ای، اصطلاحات روزمره و زبان فارسی روان.
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
-                            <span>شناسه مدل: {APP_CONFIG.geminiModels.standard}</span>
-                          </div>
+                        <div>
+                          <h3 className="text-text font-medium text-sm">پیش‌فرض هوشمند (Gemini 3.0 Flash)</h3>
+                          <p className="text-xs text-text-muted mt-1">مدل پیش‌فرض برای ترجمه‌های سریع. قابلیت‌های ایجنتیک بالا در درک زمان‌بندی‌ها.</p>
                         </div>
                     </div>
 
-                    {/* Professional (3.1 Pro - Premium Paid API) */}
+                    {/* Professional (3.0 Pro) */}
                     <div 
                       onClick={() => updateSettings({ model: 'professional' })}
                       className={`
-                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3 relative overflow-hidden
+                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3
                           ${settings.model === 'professional' 
                               ? 'bg-[#ff00ea]/10 border-[#ff00ea] shadow-[0_0_15px_rgba(255,0,234,0.15)]' 
-                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                              : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 hover:border-primary/40'
                           }
                       `}
                     >
-                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${settings.model === 'professional' ? 'border-[#ff00ea]' : 'border-white/30'}`}>
+                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center ${settings.model === 'professional' ? 'border-[#ff00ea]' : 'border-slate-400 dark:border-white/30'}`}>
                             {settings.model === 'professional' && <div className="w-2 h-2 rounded-full bg-[#ff00ea]" />}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-white font-medium text-sm">استدلال پیشرفته (Gemini 3.1 Pro)</h3>
-                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#ff00ea]/20 text-[#ff00ea] border border-[#ff00ea]/40 font-medium">
-                              پرمیوم (ویژه کلید API پولی)
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            مدل رسمی gemini-skills برای تسک‌های متنی پیچیده (Complex Text Tasks) و استدلال عمیق؛ ویژه پروژه‌های فلسفی، ادبی، کنایه‌ها و اصطلاحات تخصصی دشوار.
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
-                            <span>شناسه مدل: {APP_CONFIG.geminiModels.professional}</span>
-                          </div>
+                        <div>
+                          <h3 className="text-text font-medium text-sm">استدلال پیشرفته (Gemini 3.0 Pro)</h3>
+                          <p className="text-xs text-text-muted mt-1">بهترین گزینه برای بخش‌های دشوار و دیالوگ‌های پیچیده با استدلال (Reasoning) بالا.</p>
                         </div>
                     </div>
 
-                     {/* Flash Dynamic (Latest Flash Alias) */}
+                     {/* Flash (2.5 Flash) */}
                      <div 
                       onClick={() => updateSettings({ model: 'flash' })}
                       className={`
-                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3 relative overflow-hidden
+                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3
                           ${settings.model === 'flash' 
                               ? 'bg-yellow-400/10 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.15)]' 
-                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                              : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 hover:border-primary/40'
                           }
                       `}
                     >
-                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${settings.model === 'flash' ? 'border-yellow-400' : 'border-white/30'}`}>
+                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center ${settings.model === 'flash' ? 'border-yellow-400' : 'border-slate-400 dark:border-white/30'}`}>
                             {settings.model === 'flash' && <div className="w-2 h-2 rounded-full bg-yellow-400" />}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-white font-medium text-sm">فلش پویا (Gemini Flash Latest)</h3>
-                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 font-medium">
-                              نام مستعار رسمی (Auto-Update)
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            نام مستعار استاندارد ریپو برای «Gemini Flash»؛ اتصال مستقیم و خودکار به آخرین نسخه پایدار شاخه Flash با به‌روزرسانی مداوم کارایی.
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
-                            <span>شناسه مدل: {APP_CONFIG.geminiModels.flash}</span>
-                          </div>
+                        <div>
+                          <h3 className="text-text font-medium text-sm">پایدار و متعادل (Gemini 2.5 Flash)</h3>
+                          <p className="text-xs text-text-muted mt-1">مدل پایدار و متعادل برای پروژه‌های طولانی با هزینه بهینه.</p>
                         </div>
                     </div>
 
@@ -744,32 +709,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                      <div 
                       onClick={() => updateSettings({ model: 'flash_lite' })}
                       className={`
-                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3 relative overflow-hidden
+                          cursor-pointer p-4 rounded-xl border transition-all flex items-start gap-3
                           ${settings.model === 'flash_lite' 
-                              ? 'bg-cyan-400/10 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.15)]' 
-                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                              ? 'bg-green-400/10 border-green-400 shadow-[0_0_15px_rgba(74,222,128,0.15)]' 
+                              : 'dark:bg-white/5 bg-slate-50 dark:border-white/10 border-slate-200 hover:border-primary/40'
                           }
                       `}
                     >
-                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${settings.model === 'flash_lite' ? 'border-cyan-400' : 'border-white/30'}`}>
-                            {settings.model === 'flash_lite' && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
+                        <div className={`mt-1 w-4 h-4 rounded-full border flex items-center justify-center ${settings.model === 'flash_lite' ? 'border-green-400' : 'border-slate-400 dark:border-white/30'}`}>
+                            {settings.model === 'flash_lite' && <div className="w-2 h-2 rounded-full bg-green-400" />}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-white font-medium text-sm">اقتصادی و کم‌مصرف (Gemini 3.1 Flash Lite)</h3>
-                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-400/20 text-cyan-300 border border-cyan-400/30 font-medium">
-                              فوق‌سریع و حداقل سهمیه
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            نام مستعار رسمی در مخزن برای «Flash Lite»؛ کمترین تأخیر (Latency) و بهینه‌ترین مصرف سهمیه API برای پروژه‌های طولانی و پرحجم.
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
-                            <span>شناسه مدل: {APP_CONFIG.geminiModels.flash_lite}</span>
-                          </div>
+                        <div>
+                          <h3 className="text-text font-medium text-sm">اقتصادی (Gemini Flash Lite)</h3>
+                          <p className="text-xs text-text-muted mt-1">گزینه‌ای اقتصادی برای زیرنویس‌های ساده و سریع با کمترین مصرف توکن.</p>
                         </div>
                     </div>
-
                  </div>
               </div>
               </>)}

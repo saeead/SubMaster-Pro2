@@ -9,10 +9,10 @@ export const APP_CONFIG = {
   maxFilesPerUpload: 50,
   supportedFormats: ['srt', 'vtt', 'ass'],
   geminiModels: {
-    standard: 'gemini-3.8-flash',       // آخرین مدل فلش، سریع و رایگان (پیش‌فرض نرم‌افزار)
-    professional: 'gemini-3.1-pro-preview', // مدل پرمیوم و استدلال پیشرفته (ویژه کلیدهای API پولی)
-    flash: 'gemini-flash-latest',       // فلش پویا (هدایت خودکار به آخرین نسخه پایدار فلش)
-    flash_lite: 'gemini-3.1-flash-lite' // فلش لایت (سبک، فوق‌سریع و اقتصادی)
+    standard: 'gemini-3-flash-preview',
+    professional: 'gemini-3-pro-preview',
+    flash: 'gemini-2.5-flash-latest',
+    flash_lite: 'gemini-flash-lite-latest'
   },
   retryConfig: {
     maxRetries: 5, 
@@ -26,11 +26,11 @@ export const GEMINI_FLASH_DISCOVERY_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hour
 export const MAX_MODEL_FALLBACK_SWITCHES = 3;
 
 export const DEFAULT_FLASH_FALLBACK_CHAIN: readonly string[] = [
-  'gemini-3.8-flash',
+  'gemini-3-flash-preview',
+  'gemini-2.5-flash-latest',
   'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
-  'gemini-3.7-flash',
-  'gemini-3.6-flash'
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash'
 ];
 
 export const getCachedGeminiFlashModels = (): string[] => {

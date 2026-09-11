@@ -16,27 +16,11 @@ const geminiContextCacheMap = new Map<string, GeminiCacheEntry>();
 const geminiCacheUnsupportedKeys = new Set<string>();
 
 /**
- * Creates an authorized GoogleGenAI client instance configured according to
- * official @google/genai and gemini-skills standards, including the required
- * telemetry User-Agent header 'aistudio-build'.
+ * Creates an authorized GoogleGenAI client instance according to
+ * SubMaster-Pro standard direct connection.
  */
 export const createGeminiClient = (apiKey: string): GoogleGenAI => {
-  // When running in a browser, use the local /api/gemini proxy (Vercel Edge or container dev server)
-  // so requests are proxied via server IP, avoiding regional sanctions, CORS, and ISP blocks without VPN
-  let baseUrl: string | undefined = undefined;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    baseUrl = `${window.location.origin}/api/gemini`;
-  }
-
-  return new GoogleGenAI({
-    apiKey: apiKey.trim(),
-    httpOptions: {
-      baseUrl,
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
+  return new GoogleGenAI({ apiKey: apiKey.trim() });
 };
 
 /**
@@ -1134,32 +1118,19 @@ const extractErrorDetails = (error: any): string => {
 
 const getFriendlyErrorMessage = (error: any, modelName: string): string => {
   const msg = extractErrorDetails(error);
-  const lower = msg.toLowerCase();
-  if (lower.includes('suspended') || lower.includes('consumer') || lower.includes('has been suspended')) {
-    return '⛔ کلید API توسط گوگل تعلیق (Suspended) شده است. علت: این کلید احتمالاً در یک ریپازیتوری عمومی گیت‌هاب قرار گرفته و سیستم امنیتی گوگل سریعاً آن را مسدود کرده است. لطفاً در Google AI Studio (aistudio.google.com) یک کلید جدید دریافت کنید و هرگز آن را در گیت‌هاب منتشر نکنید.';
+  if (msg.includes('location') || msg.includes('region') || msg.includes('403')) {
+    return '⛔ خطای تحریم (IP): گوگل اجازه دسترسی نمی‌دهد. لطفاً VPN خود را روشن یا سرور آن را تغییر دهید.';
   }
-  if (lower.includes('permission denied') || lower.includes('permission_denied') || lower.includes('service disabled') || lower.includes('key has been disabled')) {
-    return '⛔ دسترسی کلید رد شد (Permission Denied): کلید API دسترسی به Generative Language API ندارد، پروژه گوگل کلاد مربوطه مسدود یا غیرفعال است، یا کلید منقضی شده است. لطفاً کلید جدید بسازید.';
+  if (msg.includes('fetch failed') || msg.includes('network')) {
+    return '⚠️ خطای شبکه: اتصال به سرور گوگل مسدود شده است.';
   }
-  if (lower.includes('api_key_invalid') || lower.includes('api key not valid') || lower.includes('invalid api key') || (lower.includes('400') && lower.includes('key'))) {
-    return '⛔ کلید API وارد شده نامعتبر است. لطفاً از Google AI Studio (aistudio.google.com) یک کلید جدید و معتبر دریافت و وارد نمایید.';
+  if (msg.includes('429') || msg.includes('quota')) {
+    return 'پایان اعتبار (429): سقف استفاده از کلید API پر شده است.';
   }
-  if (lower.includes('location') || lower.includes('region') || lower.includes('user location is not supported') || (lower.includes('403') && !lower.includes('key'))) {
-    return '⛔ خطای تحریم جغرافیایی (403): گوگل دسترسی با IP این منطقه را مستقیم مسدود کرده است. سیستم اکنون از پروکسی داخلی سرور استفاده می‌کند. اگر همچنان این پیام را می‌بینید، فیلترشکن یا اتصال خود را بررسی کنید.';
+  if (msg.includes('503') || msg.includes('overloaded')) {
+    return 'خطای سرور گوگل (503): مدل موقتاً شلوغ است. در حال تلاش مجدد...';
   }
-  if (lower.includes('fetch failed') || lower.includes('network') || lower.includes('failed to fetch')) {
-    return '⚠️ خطای شبکه: ارتباط با سرورهای گوگل مسدود شده یا اینترنت قطع است.';
-  }
-  if (lower.includes('429') || lower.includes('quota') || lower.includes('resource_exhausted')) {
-    return '⚠️ پایان سقف مصرف (429): سقف مجاز استفاده از این کلید API موقتاً پر شده است.';
-  }
-  if (lower.includes('503') || lower.includes('overloaded') || lower.includes('high demand') || lower.includes('unavailable')) {
-    return `⚠️ خطای ترافیک بالای سرور گوگل (503 High Demand): مدل ${modelName} موقتاً با بار ترافیکی بالا مواجه است. سیستم به مدل جایگزین سوییچ می‌کند.`;
-  }
-  if (lower.includes('404') || lower.includes('not found') || lower.includes('is not supported for generatecontent')) {
-    return `⚠️ مدل ${modelName} یافت نشد (404). لطفاً از مدل‌های پایدار و سریع مانند آخرین نسخه Flash استفاده کنید.`;
-  }
-  return `خطای سیستمی: ${msg.substring(0, 120)}...`;
+  return `خطای سیستمی: ${msg.substring(0, 100)}...`;
 };
 
 const getOpenAICompatibleFriendlyError = (error: any, serviceName = 'OpenAI Compatible'): string => {
@@ -1339,64 +1310,18 @@ export const getTranslationDiagnostic = (error: any, settings: AppSettings, cont
 };
 
 export const validateAPIConnection = async (apiKey: string, strictMode: boolean = false): Promise<boolean> => {
-  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) return false;
+  if (!apiKey) return false;
   try {
-    const ai = createGeminiClient(apiKey.trim());
-    const pingCall = ai.models.generateContent({
-      model: DEFAULT_GEMINI_MODEL,
-      contents: 'ping',
-      config: {
-        thinkingConfig: { thinkingBudget: 0 }
-      }
-    });
-    const timeoutCall = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Connection timeout: no response within 7s')), 7000)
-    );
-    await Promise.race([pingCall, timeoutCall]);
-    return true;
+     const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+     await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'Hi' });
+     return true;
   } catch (e: any) {
-    const errorDetails = extractErrorDetails(e).toLowerCase();
-
-    // Explicit API Key invalidation (revoked, suspended, disabled, or no permissions)
-    const isApiKeyInvalid =
-      errorDetails.includes('api_key_invalid') ||
-      errorDetails.includes('api key not valid') ||
-      errorDetails.includes('invalid api key') ||
-      errorDetails.includes('suspended') ||
-      errorDetails.includes('consumer') ||
-      errorDetails.includes('has been suspended') ||
-      errorDetails.includes('permission denied') ||
-      errorDetails.includes('permission_denied') ||
-      errorDetails.includes('service disabled') ||
-      errorDetails.includes('key has been disabled') ||
-      errorDetails.includes('caller does not have permission') ||
-      (errorDetails.includes('400') && errorDetails.includes('key'));
-
-    if (isApiKeyInvalid) {
-      return false;
-    }
-
-    // 429: Rate limited or quota exhausted -> Key IS authentic and valid
-    if (errorDetails.includes('429') || errorDetails.includes('quota') || errorDetails.includes('resource_exhausted')) {
-      return true;
-    }
-
-    // 503 / 500: Server high demand or temporary overload -> Key reached backend and is valid
-    if (errorDetails.includes('503') || errorDetails.includes('500') || isModelOverloadedError(errorDetails)) {
-      return true;
-    }
-
-    // Only actual geographical location restriction sanctions pass in non-strict mode
-    if (errorDetails.includes('location') || errorDetails.includes('user location is not supported') || errorDetails.includes('region')) {
-      return !strictMode;
-    }
-
-    return false;
+     const errorMessage = extractErrorDetails(e);
+     return errorMessage.includes("429");
   }
 };
 
 export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings): Promise<string | null> => {
-    const testModel = settings ? getResolvedGeminiModel(settings.model) : DEFAULT_GEMINI_MODEL;
     try {
         // These transports are intentionally keyless. Their actual request will
         // surface provider-specific network/access diagnostics if unavailable.
@@ -1414,22 +1339,11 @@ export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings
             return null;
         }
         const activeKey = apiKey?.trim() || (settings?.apiKeys ? new APIKeyManager(settings.apiKeys).getActiveKey() : undefined);
-        if (!activeKey) return '⛔ هیچ کلید API فعالی برای تست یافت نشد. لطفاً در بخش تنظیمات کلید معتبر اضافه کنید.';
-
-        const ai = createGeminiClient(activeKey);
-        const pingCall = ai.models.generateContent({
-          model: testModel,
-          contents: 'ping',
-          config: {
-            thinkingConfig: { thinkingBudget: 0 }
-          }
-        });
-        const timeoutCall = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Connection timeout: no response within 7s')), 7000)
-        );
-        await Promise.race([pingCall, timeoutCall]);
-        return null; 
-    } catch (e: any) {
+        if (!activeKey) return 'هیچ کلید API معتبری یافت نشد.';
+        const ai = new GoogleGenAI({ apiKey: activeKey });
+        await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'ping' });
+        return null;
+     } catch (e: any) {
         if (settings?.aiProvider === 'lm_studio') {
             return '⚠️ اتصال به LM Studio برقرار نشد. مطمئن شوید LM Studio روشن است، Local Server فعال شده و آدرس روی http://localhost:1234/v1 تنظیم است.';
         }
@@ -1438,22 +1352,25 @@ export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings
                 || settings.openAICompatibleServices[0]?.name;
             return getOpenAICompatibleFriendlyError(e, serviceName);
         }
-        return getFriendlyErrorMessage(e, testModel);
+        return getFriendlyErrorMessage(e, 'gemini-2.5-flash');
     }
 };
 
-class APIKeyManager {
+export class APIKeyManager {
   private keys: { key: string; isRateLimited: boolean }[] = [];
   private currentIndex = 0;
+
   constructor(userKeys: UserAPIKey[]) {
     userKeys.forEach(k => { if (k.isValid) this.keys.push({ key: k.key, isRateLimited: k.isRateLimited }); });
   }
+
   public getActiveKey(): string {
     const availableKeyIndex = this.keys.findIndex(k => !k.isRateLimited);
     if (availableKeyIndex === -1) throw new Error("429: All API Keys are Rate Limited.");
     this.currentIndex = availableKeyIndex;
     return this.keys[this.currentIndex].key;
   }
+
   public markCurrentAsRateLimited() { if (this.keys[this.currentIndex]) this.keys[this.currentIndex].isRateLimited = true; }
   public hasAvailableKeys(): boolean { return this.keys.some(k => !k.isRateLimited); }
 }
