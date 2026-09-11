@@ -26,12 +26,10 @@ export const GEMINI_FLASH_DISCOVERY_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hour
 export const MAX_MODEL_FALLBACK_SWITCHES = 3;
 
 export const DEFAULT_FLASH_FALLBACK_CHAIN: readonly string[] = [
-  'gemini-3.1-flash-lite',
   'gemini-3.8-flash',
-  'gemini-3.7-flash',
   'gemini-flash-latest',
-  'gemini-flash-lite-latest',
-  'gemini-3.1-flash-lite-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-3.7-flash',
   'gemini-3.6-flash'
 ];
 
@@ -56,11 +54,11 @@ export const getGeminiFallbackChain = (initialModel: string, blacklistedModels: 
   const dynamicModels = getCachedGeminiFlashModels();
   const candidates = [
     initialModel,
-    ...dynamicModels,
-    ...DEFAULT_FLASH_FALLBACK_CHAIN,
-    APP_CONFIG.geminiModels.flash_lite,
     APP_CONFIG.geminiModels.standard,
     APP_CONFIG.geminiModels.flash,
+    APP_CONFIG.geminiModels.flash_lite,
+    ...dynamicModels,
+    ...DEFAULT_FLASH_FALLBACK_CHAIN,
   ];
 
   const seen = new Set<string>();
@@ -80,30 +78,8 @@ export const DEFAULT_GEMINI_MODEL = APP_CONFIG.geminiModels.standard;
 
 export const getResolvedGeminiModel = (modelType?: ModelType): string => {
   if (modelType === 'professional') return APP_CONFIG.geminiModels.professional;
-
-  const dynamicModels = getCachedGeminiFlashModels();
-
-  if (modelType === 'flash_lite') {
-    const liteModel = dynamicModels.find(m => m.includes('flash-lite') || m.includes('flashlite'));
-    if (liteModel) return liteModel;
-    return APP_CONFIG.geminiModels.flash_lite;
-  }
-
-  if (modelType === 'flash') {
-    if (dynamicModels.includes('gemini-flash-latest')) return 'gemini-flash-latest';
-    const flashModel = dynamicModels.find(m => m === 'gemini-flash-latest' || (m.includes('flash') && !m.includes('lite')));
-    if (flashModel) return flashModel;
-    return APP_CONFIG.geminiModels.flash;
-  }
-
-  // standard / default
-  if (dynamicModels.length > 0) {
-    if (dynamicModels.includes(APP_CONFIG.geminiModels.standard)) {
-      return APP_CONFIG.geminiModels.standard;
-    }
-    return dynamicModels[0];
-  }
-
+  if (modelType === 'flash') return APP_CONFIG.geminiModels.flash;
+  if (modelType === 'flash_lite') return APP_CONFIG.geminiModels.flash_lite;
   return APP_CONFIG.geminiModels.standard;
 };
 

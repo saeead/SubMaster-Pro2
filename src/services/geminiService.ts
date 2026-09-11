@@ -167,12 +167,16 @@ export const discoverAvailableGeminiFlashModels = async (apiKey: string): Promis
       return getCachedGeminiFlashModels();
     }
 
-    // Ranking algorithm:
-    // 1. flash-lite / flashlite models (fastest, lightweight, economic)
-    // 2. stable *-flash models (without preview, experimental, exp)
-    // 3. other flash models (preview / experimental)
+    // Ranking algorithm prioritizing official models from gemini-skills repo:
+    // 1. gemini-3.8-flash (official standard default for text tasks)
+    // 2. gemini-flash-latest (official alias)
+    // 3. gemini-3.1-flash-lite (official lite alias)
+    // 4. other stable flash models
     const rankModel = (name: string): number => {
       const lower = name.toLowerCase();
+      if (lower === 'gemini-3.8-flash') return 2500;
+      if (lower === 'gemini-flash-latest') return 2200;
+      if (lower === 'gemini-3.1-flash-lite') return 2000;
       const isLite = lower.includes('flash-lite') || lower.includes('flashlite');
       const isPreview = lower.includes('preview') || lower.includes('experimental') || lower.includes('exp');
 
@@ -180,10 +184,10 @@ export const discoverAvailableGeminiFlashModels = async (apiKey: string): Promis
       const ver = verMatch ? parseFloat(verMatch[1]) : (lower.includes('latest') ? 99 : 0);
 
       let base = 100;
-      if (isLite) {
+      if (!isPreview && !isLite) {
+        base = 1200;
+      } else if (isLite) {
         base = isPreview ? 800 : 1000;
-      } else if (!isPreview) {
-        base = 500;
       }
       return base + ver;
     };

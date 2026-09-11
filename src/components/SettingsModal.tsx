@@ -639,7 +639,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                      <div className="flex items-center gap-2">
                          <label className="text-sm text-white/90 block font-bold">انتخاب مدل پردازشی Gemini</label>
                          <HelpTooltip 
-                              text="مدل پیش‌فرض نرم‌افزار به صورت خودکار آخرین نسخه فلش، سریع و رایگان است. برای پروژه‌های با استدلال عمیق و در صورت داشتن کلید API پولی جمینای، مدل‌های پرمیوم Pro نیز در دسترس هستند." 
+                              text="مدل‌های پردازشی بر اساس معماری رسمی مخزن gemini-skills تنظیم شده‌اند: Gemini 3.8 Flash برای تسک‌های استاندارد متنی، Gemini 3.1 Pro برای استدلال عمیق (پولی)، Gemini Flash Latest به عنوان نام مستعار خودکار، و Gemini 3.1 Flash Lite برای پردازش سبک و فوق‌سریع." 
                               position="bottom"
                          />
                      </div>
@@ -668,11 +668,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-white font-medium text-sm">پیش‌فرض هوشمند (Gemini 3.8 Flash)</h3>
                             <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
-                              سریع و رایگان (پیش‌فرض)
+                              توصیه گوگل (سریع و رایگان)
                             </span>
                           </div>
                           <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            آخرین نسخه پرسرعت و رایگان مدل فلش جمینای. عملکرد فوق‌العاده در درک دیالوگ‌ها، لحن محاوره‌ای و هماهنگی زمان‌بندی زیرنویس.
+                            مدل رسمی و پیشنهادی مخزن gemini-skills برای تسک‌های استاندارد متنی و زیرنویس؛ هماهنگی کامل با لحن محاوره‌ای، اصطلاحات روزمره و زبان فارسی روان.
                           </p>
                           <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
                             <span>شناسه مدل: {APP_CONFIG.geminiModels.standard}</span>
@@ -702,7 +702,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                             </span>
                           </div>
                           <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            مدل پرچمدار و پرمیوم جمینای با عمیق‌ترین سطح استدلال و هوش زبانی؛ ویژه کاربرانی با کلید API پولی جمینای برای پیچیده‌ترین عبارات استعاری، کنایه‌ها و اصطلاحات تخصصی.
+                            مدل رسمی gemini-skills برای تسک‌های متنی پیچیده (Complex Text Tasks) و استدلال عمیق؛ ویژه پروژه‌های فلسفی، ادبی، کنایه‌ها و اصطلاحات تخصصی دشوار.
                           </p>
                           <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
                             <span>شناسه مدل: {APP_CONFIG.geminiModels.professional}</span>
@@ -728,11 +728,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-white font-medium text-sm">فلش پویا (Gemini Flash Latest)</h3>
                             <span className="text-[10px] px-2 py-0.5 rounded-md bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 font-medium">
-                              به‌روزرسانی خودکار
+                              نام مستعار رسمی (Auto-Update)
                             </span>
                           </div>
                           <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            اتصال مستقیم و خودکار به آخرین نگارش منتشر شده از شاخه Flash جمینای، همواره هماهنگ با جدیدترین بهبودهای سرعت و دقت ترجمه.
+                            نام مستعار استاندارد ریپو برای «Gemini Flash»؛ اتصال مستقیم و خودکار به آخرین نسخه پایدار شاخه Flash با به‌روزرسانی مداوم کارایی.
                           </p>
                           <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
                             <span>شناسه مدل: {APP_CONFIG.geminiModels.flash}</span>
@@ -756,13 +756,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-white font-medium text-sm">اقتصادی و سبک (Gemini 3.1 Flash Lite)</h3>
+                            <h3 className="text-white font-medium text-sm">اقتصادی و کم‌مصرف (Gemini 3.1 Flash Lite)</h3>
                             <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-400/20 text-cyan-300 border border-cyan-400/30 font-medium">
-                              فوق‌سریع و کم‌مصرف
+                              فوق‌سریع و حداقل سهمیه
                             </span>
                           </div>
                           <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                            گزینه‌ای سبک و اقتصادی برای پروژه‌های طولانی و پرحجم با حداقل مصرف سهمیه و کمترین زمان انتظار.
+                            نام مستعار رسمی در مخزن برای «Flash Lite»؛ کمترین تأخیر (Latency) و بهینه‌ترین مصرف سهمیه API برای پروژه‌های طولانی و پرحجم.
                           </p>
                           <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-white/40">
                             <span>شناسه مدل: {APP_CONFIG.geminiModels.flash_lite}</span>
