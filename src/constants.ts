@@ -90,6 +90,7 @@ export const getResolvedGeminiModel = (modelType?: ModelType): string => {
   }
 
   if (modelType === 'flash') {
+    if (dynamicModels.includes('gemini-flash-latest')) return 'gemini-flash-latest';
     const flashModel = dynamicModels.find(m => m === 'gemini-flash-latest' || (m.includes('flash') && !m.includes('lite')));
     if (flashModel) return flashModel;
     return APP_CONFIG.geminiModels.flash;
@@ -361,9 +362,9 @@ const SYSTEM_PROMPTS = {
 
   localTones: {
     conversational: `--- لحن دیالوگ: محاوره‌ای و سینمایی پرکشش (Tehrani Spoken) ---
-• ترجمه باید طوری باشد که اگر کسی نسخه انگلیسی را ندیده باشد، فکر کند این دیالوگ از اول به فارسی نوشته شده است (روانی کلام بر شکستن کلمات ارجحیت دارد).
+• ترجمه باید طوری باشد که اگر کسی نسخه انگلیسی را ندیده باشد، فکر کند این دیالوگ از اول به فارسی نوشته شده است. روانی کلام بر شکستن کلمات ارجحیت دارد.
 • تأکید بر ریتم دیالوگ، گرمی، حس و حال و معادل‌های طبیعی ایرانی.
-• دوری اکید از شکسته کردن مکانیکی و افراطی واژگان؛ فقط کلمات و افعال بسیار رایج روزمره شکسته شوند (خونه، می‌شه، می‌خوای، براتون، رفتیم).
+• دوری اکید از شکسته کردن مکانیکی و اجباری واژگان؛ فقط کلمات و افعال بسیار رایج روزمره شکسته شوند (خونه، می‌شه، می‌خوای، براتون، رفتیم).
 • واژگان رسمی، علمی، تخصصی یا ادبی تحت هیچ شرایطی نباید شکسته شوند؛ حفظ متانت کلمات تخصصی الزامی است.
 • بومی‌سازی اصیل و جذاب اصطلاحات کوچه و بازاری (Slang)، متلک‌ها، تکیه‌کلام‌ها و شوخی‌ها بدون ترجمه کلمه به کلمه. طنز باید در زبان مقصد خنده‌دار بماند.`,
     movie: `--- لحن دیالوگ: سینمایی، فیلم و نمایشی (Cinematic & Movie Dialogue) ---
@@ -532,9 +533,9 @@ Priority 5: Conceptual Precision. For technical/educational topics, maintain rig
   if (isPersian) {
     if (tone === 'conversational') {
       toneInstruction = SYSTEM_PROMPTS.localTones?.conversational || `--- لحن دیالوگ: محاوره‌ای و سینمایی پرکشش (Tehrani Spoken) ---
-• ترجمه باید طوری باشد که اگر کسی نسخه انگلیسی را ندیده باشد، فکر کند این دیالوگ از اول به فارسی نوشته شده است (روانی کلام بر شکستن کلمات ارجحیت دارد).
+• ترجمه باید طوری باشد که اگر کسی نسخه انگلیسی را ندیده باشد، فکر کند این دیالوگ از اول به فارسی نوشته شده است. روانی کلام بر شکستن کلمات ارجحیت دارد.
 • تأکید بر ریتم دیالوگ، گرمی، حس و حال و معادل‌های طبیعی ایرانی.
-• دوری اکید از شکسته کردن مکانیکی و افراطی واژگان؛ فقط کلمات و افعال بسیار رایج روزمره شکسته شوند (خونه، می‌شه، می‌خوای، براتون، رفتیم).
+• دوری اکید از شکسته کردن مکانیکی و اجباری واژگان؛ فقط کلمات و افعال بسیار رایج روزمره شکسته شوند (خونه، می‌شه، می‌خوای، براتون، رفتیم).
 • واژگان رسمی، علمی، تخصصی یا ادبی تحت هیچ شرایطی نباید شکسته شوند؛ حفظ متانت کلمات تخصصی الزامی است.
 • بومی‌سازی اصیل و جذاب اصطلاحات کوچه و بازاری (Slang)، متلک‌ها و تکیه‌کلام‌ها بدون ترجمه کلمه به کلمه.`;
     } else if (tone === 'movie') {
@@ -756,8 +757,8 @@ Read surrounding cues only to resolve ambiguity and maintain flow across cuts. T
 Context cues are read-only anchors. Translate every requested tagged line ([TRANSLATE_X]) and return only the requested tagged lines without altering numbering or surrounding skeleton structure.`;
   }
   if (method === 'subtitle_translator') {
-    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT (Master Subtitle Localization) ---
-Translate dialogue lines inside the requested [TRANSLATE_X] tags into natural, cinema-grade subtitles with authentic speech cadence, character personality, and dialogue rhythm. Strictly preserve all tag IDs and tag counts. Never output preambles, extra text, or markdown.`;
+    return `--- SUBTITLE TRANSLATOR METHOD CONTRACT (Master Subtitle Localization based on rockbenben/subtitle-translator) ---
+Translate dialogue lines inside the requested [TRANSLATE_X] tags into professionally written native subtitles and cinema-grade dialogue with authentic speech cadence, character personality, and rhythm. Strictly preserve all tag IDs and tag counts. Never output preambles, extra text, or markdown.`;
   }
   return `--- STANDARD BATCH METHOD CONTRACT ---
 Translate each JSON item with complete fidelity, returning exactly one native, un-summarized translation per requested item id.`;

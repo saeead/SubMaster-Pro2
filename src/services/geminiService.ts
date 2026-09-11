@@ -16,6 +16,22 @@ const geminiContextCacheMap = new Map<string, GeminiCacheEntry>();
 const geminiCacheUnsupportedKeys = new Set<string>();
 
 /**
+ * Creates an authorized GoogleGenAI client instance configured according to
+ * official @google/genai and gemini-skills standards, including the required
+ * telemetry User-Agent header 'aistudio-build'.
+ */
+export const createGeminiClient = (apiKey: string): GoogleGenAI => {
+  return new GoogleGenAI({
+    apiKey: apiKey.trim(),
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+};
+
+/**
  * Session blacklist for models that return 503 / overloaded / UNAVAILABLE / high demand.
  * This prevents the engine from repeatedly hitting congested models during the current user session.
  */
@@ -1102,19 +1118,26 @@ const extractErrorDetails = (error: any): string => {
 
 const getFriendlyErrorMessage = (error: any, modelName: string): string => {
   const msg = extractErrorDetails(error);
-  if (msg.includes('location') || msg.includes('region') || msg.includes('403')) {
-    return '⛔ خطای تحریم (IP): گوگل اجازه دسترسی نمی‌دهد. لطفاً VPN خود را روشن یا سرور آن را تغییر دهید.';
+  const lower = msg.toLowerCase();
+  if (lower.includes('api_key_invalid') || lower.includes('api key not valid') || lower.includes('invalid api key') || (lower.includes('400') && lower.includes('key'))) {
+    return '⛔ کلید API وارد شده نامعتبر است. لطفاً از Google AI Studio (aistudio.google.com) یک کلید جدید و معتبر دریافت و وارد نمایید.';
   }
-  if (msg.includes('fetch failed') || msg.includes('network')) {
-    return '⚠️ خطای شبکه: اتصال به سرور گوگل مسدود شده است.';
+  if (lower.includes('location') || lower.includes('region') || lower.includes('user location is not supported') || (lower.includes('403') && !lower.includes('key'))) {
+    return '⛔ خطای تحریم جغرافیایی (403): گوگل دسترسی با IP ایران را مسدود کرده است. لطفاً فیلترشکن (VPN) خود را روشن کنید یا سرور آن را به کشوری مجاز تغییر دهید.';
   }
-  if (msg.includes('429') || msg.includes('quota')) {
-    return 'پایان اعتبار (429): سقف استفاده از کلید API پر شده است.';
+  if (lower.includes('fetch failed') || lower.includes('network') || lower.includes('failed to fetch')) {
+    return '⚠️ خطای شبکه: ارتباط با سرورهای گوگل مسدود شده یا اینترنت قطع است.';
   }
-  if (msg.includes('503') || msg.includes('overloaded')) {
-    return 'خطای سرور گوگل (503): مدل موقتاً شلوغ است. در حال تلاش مجدد...';
+  if (lower.includes('429') || lower.includes('quota') || lower.includes('resource_exhausted')) {
+    return '⚠️ پایان سقف مصرف (429): سقف مجاز استفاده از این کلید API موقتاً پر شده است.';
   }
-  return `خطای سیستمی: ${msg.substring(0, 100)}...`;
+  if (lower.includes('503') || lower.includes('overloaded') || lower.includes('high demand') || lower.includes('unavailable')) {
+    return `⚠️ خطای ترافیک بالای سرور گوگل (503 High Demand): مدل ${modelName} موقتاً با بار ترافیکی بالا مواجه است. سیستم به مدل جایگزین سوییچ می‌کند.`;
+  }
+  if (lower.includes('404') || lower.includes('not found') || lower.includes('is not supported for generatecontent')) {
+    return `⚠️ مدل ${modelName} یافت نشد (404). لطفاً از مدل‌های پایدار و سریع مانند آخرین نسخه Flash استفاده کنید.`;
+  }
+  return `خطای سیستمی: ${msg.substring(0, 120)}...`;
 };
 
 const getOpenAICompatibleFriendlyError = (error: any, serviceName = 'OpenAI Compatible'): string => {
@@ -1270,19 +1293,52 @@ export const getTranslationDiagnostic = (error: any, settings: AppSettings, cont
 };
 
 export const validateAPIConnection = async (apiKey: string, strictMode: boolean = false): Promise<boolean> => {
-  if (!apiKey) return false;
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) return false;
   try {
-     const ai = new GoogleGenAI({ apiKey: apiKey });
-     await ai.models.generateContent({ model: DEFAULT_GEMINI_MODEL, contents: 'Hi' });
-     return true;
+    const ai = createGeminiClient(apiKey.trim());
+    await ai.models.generateContent({
+      model: DEFAULT_GEMINI_MODEL,
+      contents: 'ping',
+      config: {
+        thinkingConfig: { thinkingBudget: 0 }
+      }
+    });
+    return true;
   } catch (e: any) {
-     const errorMessage = extractErrorDetails(e);
-     return errorMessage.includes("429");
+    const errorDetails = extractErrorDetails(e).toLowerCase();
+
+    // Explicit API Key invalidation
+    const isApiKeyInvalid =
+      errorDetails.includes('api_key_invalid') ||
+      errorDetails.includes('api key not valid') ||
+      errorDetails.includes('invalid api key') ||
+      (errorDetails.includes('400') && errorDetails.includes('key'));
+
+    if (isApiKeyInvalid) {
+      return false;
+    }
+
+    // 429: Rate limited or quota exhausted -> Key IS authentic and valid
+    if (errorDetails.includes('429') || errorDetails.includes('quota') || errorDetails.includes('resource_exhausted')) {
+      return true;
+    }
+
+    // 503 / 500: Server high demand or temporary overload -> Key reached backend and is valid
+    if (errorDetails.includes('503') || errorDetails.includes('500') || isModelOverloadedError(errorDetails)) {
+      return true;
+    }
+
+    // 403: Location / region restriction (sanctions) -> Key itself is valid
+    if (errorDetails.includes('403') || errorDetails.includes('location') || errorDetails.includes('user location is not supported')) {
+      return !strictMode;
+    }
+
+    return false;
   }
 };
 
 export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings): Promise<string | null> => {
-    const testModel = DEFAULT_GEMINI_MODEL;
+    const testModel = settings ? getResolvedGeminiModel(settings.model) : DEFAULT_GEMINI_MODEL;
     try {
         // These transports are intentionally keyless. Their actual request will
         // surface provider-specific network/access diagnostics if unavailable.
@@ -1299,9 +1355,17 @@ export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings
             await callOpenAICompatibleChat(service, settings.temperature, 'You are a connection tester.', 'Reply with only OK.');
             return null;
         }
-        if (!apiKey) return 'هیچ کلید API معتبری یافت نشد.';
-        const ai = new GoogleGenAI({ apiKey: apiKey });
-        await ai.models.generateContent({ model: testModel, contents: 'ping' });
+        const activeKey = apiKey?.trim() || (settings?.apiKeys ? new APIKeyManager(settings.apiKeys).getActiveKey() : undefined);
+        if (!activeKey) return '⛔ هیچ کلید API فعالی برای تست یافت نشد. لطفاً در بخش تنظیمات کلید معتبر اضافه کنید.';
+
+        const ai = createGeminiClient(activeKey);
+        await ai.models.generateContent({
+          model: testModel,
+          contents: 'ping',
+          config: {
+            thinkingConfig: { thinkingBudget: 0 }
+          }
+        });
         return null; 
     } catch (e: any) {
         if (settings?.aiProvider === 'lm_studio') {
@@ -1467,7 +1531,7 @@ STRICT JSON OUTPUT MANDATE:
       }
 
       signal?.throwIfAborted();
-      const ai = new GoogleGenAI({ apiKey: currentApiKey });
+      const ai = createGeminiClient(currentApiKey);
 
       // Only apply Core/Dynamic separation and Context Caching when provider is Gemini
       const coreInstruction = getCoreSystemInstruction(settings.targetLanguage, promptMethod);
@@ -1860,7 +1924,7 @@ STRICT JSON OUTPUT MANDATE:
       }
 
       currentApiKey = keyManager.getActiveKey();
-      const ai = new GoogleGenAI({ apiKey: currentApiKey });
+      const ai = createGeminiClient(currentApiKey);
 
       // Dynamic temperature for Gemini retranslation (validationRetries + 1 ensures disciplined focus)
       const geminiTemp = getGeminiTemperature(
@@ -2008,7 +2072,7 @@ export const translateFreeText = async (text: string, settings: AppSettings, tar
         const service = getActiveOpenAICompatibleService(settings);
         return callOpenAICompatibleChat(service, settings.temperature, `${LANGUAGE_PROMPTS[targetLang]}\n${targetLang === 'fa' ? 'Use natural Persian.' : 'Use natural target-language grammar and style.'}`, `${text}\n\nReturn only the translated text.`);
     }
-    const ai = new GoogleGenAI({ apiKey: new APIKeyManager(settings.apiKeys).getActiveKey() });
+    const ai = createGeminiClient(new APIKeyManager(settings.apiKeys).getActiveKey());
     const modelName = getResolvedGeminiModel(settings.model);
     const response = await ai.models.generateContent({
         model: modelName,
@@ -2051,7 +2115,7 @@ export const translateSkeletonPayload = async (content: string, settings: AppSet
   if (settings.aiProvider === 'lm_studio') return callLmStudioChat(settings, systemInstruction, content, signal);
   if (settings.aiProvider === 'openai_compatible') return callOpenAICompatibleChat(getActiveOpenAICompatibleService(settings), settings.temperature, systemInstruction, content, signal);
   signal?.throwIfAborted();
-  const ai = new GoogleGenAI({ apiKey: new APIKeyManager(settings.apiKeys).getActiveKey() });
+  const ai = createGeminiClient(new APIKeyManager(settings.apiKeys).getActiveKey());
   const modelName = getResolvedGeminiModel(settings.model);
   const response = await ai.models.generateContent({ model: modelName, contents: content, config: { systemInstruction, temperature: settings.temperature, safetySettings: SAFETY_SETTINGS } });
   signal?.throwIfAborted();

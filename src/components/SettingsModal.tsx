@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Cpu, Key, Plus, Trash2, CheckCircle, AlertTriangle, Loader2, Database, ToggleRight, ToggleLeft, ExternalLink, HelpCircle } from 'lucide-react';
+import { X, Cpu, Key, Plus, Trash2, CheckCircle, AlertTriangle, Loader2, Database, ToggleRight, ToggleLeft, ExternalLink, HelpCircle, Activity } from 'lucide-react';
 import { AIProvider, AppSettings, OpenAICompatibleService, UserAPIKey } from '../types';
 import { diagnoseConnection, validateAPIConnection } from '../services/geminiService';
 import { getMemorySize, clearMemory } from '../services/translationMemory';
@@ -37,6 +37,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const [serviceModelInput, setServiceModelInput] = useState('');
   const [openAIServiceMessage, setOpenAIServiceMessage] = useState<string | null>(null);
   const [isTestingOpenAIService, setIsTestingOpenAIService] = useState(false);
+  const [isTestingGemini, setIsTestingGemini] = useState(false);
+  const [geminiTestMessage, setGeminiTestMessage] = useState<string | null>(null);
+  const [testingKeyIndex, setTestingKeyIndex] = useState<number | null>(null);
   
   // State for Help Modal
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -196,6 +199,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
       });
       setOpenAIServiceMessage(error || `✅ اتصال به ${serviceToTest.name} برقرار است.`);
       setIsTestingOpenAIService(false);
+  };
+
+  const handleTestGeminiConnection = async (specificKey?: string, keyIndex?: number) => {
+      if (keyIndex !== undefined) {
+          setTestingKeyIndex(keyIndex);
+      } else {
+          setIsTestingGemini(true);
+      }
+      setGeminiTestMessage(null);
+      const keyToTest = specificKey || settings.apiKeys.find(k => k.isValid && !k.isRateLimited)?.key || settings.apiKeys[0]?.key;
+      if (!keyToTest) {
+          setGeminiTestMessage('⛔ هیچ کلید API برای تست یافت نشد. لطفاً ابتدا کلید وارد کنید.');
+          setIsTestingGemini(false);
+          setTestingKeyIndex(null);
+          return;
+      }
+      const error = await diagnoseConnection(keyToTest, { ...settings, aiProvider: 'gemini' });
+      if (!error) {
+          setGeminiTestMessage('✅ اتصال به Google Gemini برقرار است و کلید فعال می‌باشد.');
+          if (specificKey) {
+              updateSettings({
+                  apiKeys: settings.apiKeys.map(k => k.key === specificKey ? { ...k, isValid: true, isRateLimited: false } : k)
+              });
+          }
+      } else {
+          setGeminiTestMessage(error);
+          if (specificKey && (error.includes('⛔ کلید API') || error.includes('نامعتبر'))) {
+              updateSettings({
+                  apiKeys: settings.apiKeys.map(k => k.key === specificKey ? { ...k, isValid: false } : k)
+              });
+          }
+      }
+      setIsTestingGemini(false);
+      setTestingKeyIndex(null);
   };
 
   return (
@@ -539,16 +576,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                              </span>
                           </div>
                         </div>
-                        <button 
-                          onClick={() => removeKey(k.key)}
-                          className="text-white/20 hover:text-red-400 transition-colors p-1"
-                          title="حذف کلید"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleTestGeminiConnection(k.key, idx)}
+                            disabled={testingKeyIndex === idx || isTestingGemini}
+                            className="text-white/40 hover:text-primary hover:bg-primary/10 transition-colors p-1.5 rounded-md"
+                            title="تست اتصال و اعتبار این کلید"
+                          >
+                            {testingKeyIndex === idx ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                            ) : (
+                              <Activity className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <button 
+                            onClick={() => removeKey(k.key)}
+                            className="text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-colors p-1.5 rounded-md"
+                            title="حذف کلید"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
+
+                  {/* Gemini Service Connection Test */}
+                  {settings.apiKeys.length > 0 && (
+                    <div className="mt-3 pt-3 border-t dark:border-white/5 border-slate-200 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleTestGeminiConnection()}
+                        disabled={isTestingGemini}
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border border-secondary/40 text-secondary hover:bg-secondary/10 active:scale-[0.99] disabled:opacity-50 transition-all font-persian"
+                      >
+                        {isTestingGemini ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        <span>تست اتصال سرویس Google Gemini</span>
+                      </button>
+
+                      {geminiTestMessage && (
+                        <div className={`p-2.5 rounded-lg text-xs flex items-start gap-2 border animate-in fade-in font-persian ${
+                          geminiTestMessage.startsWith('✅')
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                        }`}>
+                          {geminiTestMessage.startsWith('✅') ? (
+                            <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                          )}
+                          <span className="leading-relaxed">{geminiTestMessage}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
