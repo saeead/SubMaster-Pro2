@@ -1296,13 +1296,17 @@ export const validateAPIConnection = async (apiKey: string, strictMode: boolean 
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) return false;
   try {
     const ai = createGeminiClient(apiKey.trim());
-    await ai.models.generateContent({
+    const pingCall = ai.models.generateContent({
       model: DEFAULT_GEMINI_MODEL,
       contents: 'ping',
       config: {
         thinkingConfig: { thinkingBudget: 0 }
       }
     });
+    const timeoutCall = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Connection timeout: no response within 7s')), 7000)
+    );
+    await Promise.race([pingCall, timeoutCall]);
     return true;
   } catch (e: any) {
     const errorDetails = extractErrorDetails(e).toLowerCase();
@@ -1359,13 +1363,17 @@ export const diagnoseConnection = async (apiKey?: string, settings?: AppSettings
         if (!activeKey) return '⛔ هیچ کلید API فعالی برای تست یافت نشد. لطفاً در بخش تنظیمات کلید معتبر اضافه کنید.';
 
         const ai = createGeminiClient(activeKey);
-        await ai.models.generateContent({
+        const pingCall = ai.models.generateContent({
           model: testModel,
           contents: 'ping',
           config: {
             thinkingConfig: { thinkingBudget: 0 }
           }
         });
+        const timeoutCall = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timeout: no response within 7s')), 7000)
+        );
+        await Promise.race([pingCall, timeoutCall]);
         return null; 
     } catch (e: any) {
         if (settings?.aiProvider === 'lm_studio') {

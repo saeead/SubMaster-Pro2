@@ -1460,27 +1460,9 @@ const App: React.FC = () => {
     const firstFileId = targetFile.id;
     updateFileStatus(firstFileId, {
         status: AppStatus.TRANSLATING, 
-        progressMessage: activeSettings.aiProvider === 'lm_studio' ? 'در حال بررسی اتصال به LM Studio...' : activeSettings.aiProvider === 'openai_compatible' ? 'در حال بررسی اتصال به سرویس OpenAI Compatible...' : isKeylessProvider ? 'در حال بررسی اتصال به سرویس ترجمه...' : 'در حال بررسی اتصال به سرور گوگل (DNS/VPN)...'
+        progressMessage: 'در حال اتصال مستقیم و شروع ترجمه...',
+        diagnostic: null
     });
-
-    const testKey = isKeylessProvider ? undefined : activeSettings.apiKeys.find(k => k.isValid)?.key;
-    if (isKeylessProvider || testKey) {
-        const diagnosisError = await diagnoseConnection(testKey, activeSettings);
-        if (diagnosisError) {
-             const diagnostic = getTranslationDiagnostic(
-                new Error(diagnosisError),
-                activeSettings,
-                'Pre-flight connection diagnosis before translation start'
-             );
-             updateFileStatus(firstFileId, { 
-                status: AppStatus.PAUSED, 
-                progressMessage: 'خطای اتصال',
-                diagnostic
-             });
-             showDiagnosticToast(diagnostic);
-             return;
-        }
-    }
 
     autoPipelineActiveRef.current = true;
     isTranslatingRef.current = true;
