@@ -121,7 +121,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
         if (duplicateCount > 0 && invalidCount === 0) {
             setValidationError('همه کلیدهای وارد شده تکراری هستند.');
         } else {
-            setValidationError('هیچ کلید معتبری یافت نشد. لطفاً از صحت کلیدها اطمینان حاصل کنید.');
+            setValidationError('هیچ کلید معتبری یافت نشد. توجه: در صورتی که کلید توسط گوگل تعلیق (Suspended) شده باشد یا فاقد دسترسی باشد، پذیرفته نمی‌شود. لطفاً کلید سالم از Google AI Studio وارد کنید.');
         }
     }
 
@@ -225,7 +225,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
           }
       } else {
           setGeminiTestMessage(error);
-          if (specificKey && (error.includes('⛔ کلید API') || error.includes('نامعتبر'))) {
+          if (specificKey && (error.includes('⛔') || error.includes('نامعتبر') || error.includes('تعلیق') || error.includes('رد شد'))) {
               updateSettings({
                   apiKeys: settings.apiKeys.map(k => k.key === specificKey ? { ...k, isValid: false } : k)
               });

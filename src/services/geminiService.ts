@@ -21,9 +21,17 @@ const geminiCacheUnsupportedKeys = new Set<string>();
  * telemetry User-Agent header 'aistudio-build'.
  */
 export const createGeminiClient = (apiKey: string): GoogleGenAI => {
+  // When running in a browser, use the local /api/gemini proxy (Vercel Edge or container dev server)
+  // so requests are proxied via server IP, avoiding regional sanctions, CORS, and ISP blocks without VPN
+  let baseUrl: string | undefined = undefined;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    baseUrl = `${window.location.origin}/api/gemini`;
+  }
+
   return new GoogleGenAI({
     apiKey: apiKey.trim(),
     httpOptions: {
+      baseUrl,
       headers: {
         'User-Agent': 'aistudio-build',
       },
@@ -120,7 +128,11 @@ export const discoverAvailableGeminiFlashModels = async (apiKey: string): Promis
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey.trim())}`;
+    const isBrowser = typeof window !== 'undefined' && Boolean(window.location?.origin);
+    const baseEndpoint = isBrowser
+      ? `${window.location.origin}/api/gemini/v1beta/models`
+      : `https://generativelanguage.googleapis.com/v1beta/models`;
+    const url = `${baseEndpoint}?key=${encodeURIComponent(apiKey.trim())}`;
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
@@ -1123,11 +1135,17 @@ const extractErrorDetails = (error: any): string => {
 const getFriendlyErrorMessage = (error: any, modelName: string): string => {
   const msg = extractErrorDetails(error);
   const lower = msg.toLowerCase();
+  if (lower.includes('suspended') || lower.includes('consumer') || lower.includes('has been suspended')) {
+    return '⛔ کلید API توسط گوگل تعلیق (Suspended) شده است. علت: این کلید احتمالاً در یک ریپازیتوری عمومی گیت‌هاب قرار گرفته و سیستم امنیتی گوگل سریعاً آن را مسدود کرده است. لطفاً در Google AI Studio (aistudio.google.com) یک کلید جدید دریافت کنید و هرگز آن را در گیت‌هاب منتشر نکنید.';
+  }
+  if (lower.includes('permission denied') || lower.includes('permission_denied') || lower.includes('service disabled') || lower.includes('key has been disabled')) {
+    return '⛔ دسترسی کلید رد شد (Permission Denied): کلید API دسترسی به Generative Language API ندارد، پروژه گوگل کلاد مربوطه مسدود یا غیرفعال است، یا کلید منقضی شده است. لطفاً کلید جدید بسازید.';
+  }
   if (lower.includes('api_key_invalid') || lower.includes('api key not valid') || lower.includes('invalid api key') || (lower.includes('400') && lower.includes('key'))) {
     return '⛔ کلید API وارد شده نامعتبر است. لطفاً از Google AI Studio (aistudio.google.com) یک کلید جدید و معتبر دریافت و وارد نمایید.';
   }
   if (lower.includes('location') || lower.includes('region') || lower.includes('user location is not supported') || (lower.includes('403') && !lower.includes('key'))) {
-    return '⛔ خطای تحریم جغرافیایی (403): گوگل دسترسی با IP ایران را مسدود کرده است. لطفاً فیلترشکن (VPN) خود را روشن کنید یا سرور آن را به کشوری مجاز تغییر دهید.';
+    return '⛔ خطای تحریم جغرافیایی (403): گوگل دسترسی با IP این منطقه را مستقیم مسدود کرده است. سیستم اکنون از پروکسی داخلی سرور استفاده می‌کند. اگر همچنان این پیام را می‌بینید، فیلترشکن یا اتصال خود را بررسی کنید.';
   }
   if (lower.includes('fetch failed') || lower.includes('network') || lower.includes('failed to fetch')) {
     return '⚠️ خطای شبکه: ارتباط با سرورهای گوگل مسدود شده یا اینترنت قطع است.';
@@ -1237,6 +1255,30 @@ export const getTranslationDiagnostic = (error: any, settings: AppSettings, cont
     };
   }
 
+  if (msg.includes('suspended') || msg.includes('consumer') || msg.includes('has been suspended')) {
+    return {
+      code: 'api_key_suspended',
+      severity: 'error',
+      title: 'کلید API توسط گوگل تعلیق یا مسدود شده است',
+      cause: 'گوگل این کلید را مسدود کرده است (consumer has been suspended). این اتفاق معمولاً زمانی رخ می‌دهد که کلید در سورس‌کد گیت‌هاب پابلیک شود، پروژه منقضی یا مسدود شود، یا دسترسی API روی کلید محدود شده باشد.',
+      recovery: 'وارد Google AI Studio (aistudio.google.com) شوید و با یک اکانت سالم کلید جدید ایجاد کنید. هرگز کلید را در گیت‌هاب پوش نکنید.',
+      technicalDetails: details || msg,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  if (msg.includes('permission denied') || msg.includes('permission_denied') || msg.includes('service disabled') || msg.includes('key has been disabled')) {
+    return {
+      code: 'api_key_permission_denied',
+      severity: 'error',
+      title: 'عدم دسترسی با کلید انتخابی (Permission Denied)',
+      cause: `سرویس ${providerName} دسترسی این کلید را به مدل رد کرد. پروژه Google Cloud مسدود است یا دسترسی به Generative Language API فعال نیست.`,
+      recovery: 'از کنسول Google AI Studio کلید جدید بسازید و از فعال بودن دسترسی مدل‌های Gemini در آن پروژه اطمینان حاصل کنید.',
+      technicalDetails: details || msg,
+      timestamp: new Date().toISOString()
+    };
+  }
+
   if (msg.includes('401') || msg.includes('unauthorized') || msg.includes('invalid api key') || msg.includes('authentication')) {
     return {
       code: 'authentication_failed',
@@ -1315,11 +1357,19 @@ export const validateAPIConnection = async (apiKey: string, strictMode: boolean 
   } catch (e: any) {
     const errorDetails = extractErrorDetails(e).toLowerCase();
 
-    // Explicit API Key invalidation
+    // Explicit API Key invalidation (revoked, suspended, disabled, or no permissions)
     const isApiKeyInvalid =
       errorDetails.includes('api_key_invalid') ||
       errorDetails.includes('api key not valid') ||
       errorDetails.includes('invalid api key') ||
+      errorDetails.includes('suspended') ||
+      errorDetails.includes('consumer') ||
+      errorDetails.includes('has been suspended') ||
+      errorDetails.includes('permission denied') ||
+      errorDetails.includes('permission_denied') ||
+      errorDetails.includes('service disabled') ||
+      errorDetails.includes('key has been disabled') ||
+      errorDetails.includes('caller does not have permission') ||
       (errorDetails.includes('400') && errorDetails.includes('key'));
 
     if (isApiKeyInvalid) {
@@ -1336,8 +1386,8 @@ export const validateAPIConnection = async (apiKey: string, strictMode: boolean 
       return true;
     }
 
-    // 403: Location / region restriction (sanctions) -> Key itself is valid
-    if (errorDetails.includes('403') || errorDetails.includes('location') || errorDetails.includes('user location is not supported')) {
+    // Only actual geographical location restriction sanctions pass in non-strict mode
+    if (errorDetails.includes('location') || errorDetails.includes('user location is not supported') || errorDetails.includes('region')) {
       return !strictMode;
     }
 

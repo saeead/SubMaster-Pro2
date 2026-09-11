@@ -88,6 +88,72 @@ const openAICompatibleProxy = (): Plugin => {
   };
 };
 
+const geminiProxy = (): Plugin => {
+  const handler = async (req: import('http').IncomingMessage, res: import('http').ServerResponse) => {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-goog-api-client, x-goog-api-key'
+      });
+      res.end();
+      return;
+    }
+
+    try {
+      const incomingUrl = req.url || '';
+      const subPath = incomingUrl.replace(/^\/?/, '');
+      const targetUrl = `https://generativelanguage.googleapis.com/${subPath}`;
+
+      const headers: Record<string, string> = {
+        'Content-Type': (req.headers['content-type'] as string) || 'application/json',
+      };
+      if (req.headers['x-goog-api-client']) headers['x-goog-api-client'] = String(req.headers['x-goog-api-client']);
+      if (req.headers['x-goog-api-key']) headers['x-goog-api-key'] = String(req.headers['x-goog-api-key']);
+
+      let body: Buffer | undefined = undefined;
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        body = Buffer.concat(chunks);
+      }
+
+      const upstreamResponse = await fetch(targetUrl, {
+        method: req.method,
+        headers,
+        body
+      });
+
+      const contentType = upstreamResponse.headers.get('content-type') || 'application/json';
+      const responseData = await upstreamResponse.arrayBuffer();
+
+      res.writeHead(upstreamResponse.status, {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(Buffer.from(responseData));
+    } catch (err: any) {
+      res.writeHead(502, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(JSON.stringify({ error: { message: err?.message || 'Gemini proxy request failed' } }));
+    }
+  };
+
+  return {
+    name: 'gemini-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/gemini', handler);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use('/api/gemini', handler);
+    }
+  };
+};
+
 
 export default defineConfig(({ mode }) => {
     // Load env file based on `mode` in the current working directory.
@@ -105,7 +171,7 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         allowedHosts: true,
       },
-      plugins: [react(), openAICompatibleProxy()],
+      plugins: [react(), openAICompatibleProxy(), geminiProxy()],
       define: {
         // This is crucial for exposing the key to the client side
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
