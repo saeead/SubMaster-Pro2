@@ -140,6 +140,19 @@ export const extractSubtitleTranslatorLinesByMarkerIds = (
     }
   }
 
+  // Tier 4.5: Direct ID prefix matching like [384] text [/384] or 384: text or 384. text
+  if (slots.some(val => val === '')) {
+    const tier45Pattern = /(?:^|\n)\s*(?:[\[<](\d+)[\]>]|(\d+)[:.-])\s*([\s\S]*?)(?=(?:\n\s*(?:[\[<]\d+[\]>]|\d+[:.-]))|$)/gi;
+    let match45: RegExpExecArray | null;
+    while ((match45 = tier45Pattern.exec(sanitized))) {
+      const id = Number(match45[1] || match45[2]);
+      const slot = idToSlot.get(id);
+      if (slot !== undefined && slots[slot] === '') {
+        slots[slot] = cleanTranslatedSlot(match45[3]);
+      }
+    }
+  }
+
   // Tier 5: Context leak & Hallucination loop protection
   // Intelligent filtering: Allows valid identical short responses ("بله", "نه", "سلام", "باشه")
   // but blocks verbatim echoing of context cues or runaway infinite repetition loops.

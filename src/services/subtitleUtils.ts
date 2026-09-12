@@ -792,3 +792,27 @@ export const checkCueStandardCompliance = (
   return null;
 };
 
+/**
+ * Checks whether a text contains solely punctuation, numbers, symbols, music signs, or whitespace.
+ * Subtitle lines matching this criteria (e.g. "100%", "2024", "...", "[Music]", "♪") naturally do not need lexical translation.
+ */
+export const isPunctuationOrSymbolicOrNumeric = (text: string): boolean => {
+  if (!text || !text.trim()) return true;
+  const stripped = text.replace(/[\d\s.,\/#!$%\^&\*;:{}=\-_`~()?"'«»،؛؟\[\]<>♪♫—–•°\\|@+]/g, '');
+  return stripped.length === 0;
+};
+
+/**
+ * Checks whether the source text is already written in the target script (e.g. Persian/Arabic)
+ * without any foreign Latin characters, meaning retaining it is valid rather than an untranslated echo.
+ */
+export const isAlreadyTargetLanguage = (text: string, targetLang: string = 'fa'): boolean => {
+  if (!text || !text.trim()) return false;
+  if (targetLang === 'fa' || targetLang === 'ar') {
+    const hasPersianArabic = /[\u0600-\u06FF]/.test(text);
+    const hasLatin = /[a-zA-Z]/.test(text);
+    return hasPersianArabic && !hasLatin;
+  }
+  return false;
+};
+

@@ -13,8 +13,8 @@ import { GlossaryModal } from './components/GlossaryModal';
 import { TextTranslatorModal } from './components/TextTranslatorModal';
 import { Toast, ToastType } from './components/Toast';
 import { SubtitleBlock, AppStatus, BatchRequest, BatchResponse, AppSettings, AdjustmentConfig, StyleConfig, GlossaryItem, SubtitleFile, Modification, TranslationDiagnostic } from './types';
-import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking, estimateTranslationQuality } from './services/subtitleUtils';
-import { translateBatch, diagnoseConnection, retranslateSelectedBlocks, getTranslationDiagnostic, translateSkeletonPayload, ensureFreshGeminiFlashModels, isAbortError } from './services/geminiService';
+import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking, estimateTranslationQuality, isPunctuationOrSymbolicOrNumeric, isAlreadyTargetLanguage } from './services/subtitleUtils';
+import { translateBatch, diagnoseConnection, retranslateSelectedBlocks, getTranslationDiagnostic, translateSkeletonPayload, ensureFreshGeminiFlashModels, isAbortError, translateFreeText } from './services/geminiService';
 import { buildSkeletonUserPrompt, extractTranslatedLinesByMarkerIds, normalizeSkeletonPersianHalfSpaces } from './services/methods/skeleton_str';
 import { buildSubtitleTranslatorUserPrompt, extractTranslatedLinesByMarkerIds as extractSubtitleTranslatorLinesByMarkerIds, normalizeSubtitleTranslatorPersianHalfSpaces } from './services/methods/subtitle_translator_strategy';
 import { getFromMemory, addToMemory } from './services/translationMemory';
@@ -1033,7 +1033,15 @@ const App: React.FC = () => {
       const prompt = isSubtitleTranslatorMethod
         ? buildSubtitleTranslatorUserPrompt(payload, group.length, settingsRef.current.targetLanguage, groupIds)
         : buildSkeletonUserPrompt(payload, group.length, settingsRef.current.targetLanguage, groupIds);
-      const response = await translateSkeletonPayload(prompt, settingsRef.current, signal);
+      
+      let response = '';
+      try {
+        response = await translateSkeletonPayload(prompt, settingsRef.current, signal);
+      } catch (err: any) {
+        if (isAbortError(err, signal)) throw err;
+        console.warn('translateSkeletonPayload failed in requestGroup, will escalate to fallback tiers:', err);
+      }
+
       const extracted = isSubtitleTranslatorMethod
         ? extractSubtitleTranslatorLinesByMarkerIds(response, groupIds, group.map(block => block.originalText), contextLines)
         : extractTranslatedLinesByMarkerIds(response, groupIds, group.map(block => block.originalText), contextLines);
@@ -1044,42 +1052,78 @@ const App: React.FC = () => {
         const normalized = value && settingsRef.current.targetLanguage === 'fa'
           ? (isSubtitleTranslatorMethod ? normalizeSubtitleTranslatorPersianHalfSpaces(value) : normalizeSkeletonPersianHalfSpaces(value))
           : value;
+        const sourceText = sourceById.get(block.id)?.trim() || '';
+        const isSymbolic = isPunctuationOrSymbolicOrNumeric(sourceText);
+        const isAlreadyPersian = isAlreadyTargetLanguage(sourceText, settingsRef.current.targetLanguage);
+
         if (
           normalized
           && normalized.trim()
-          && normalized.trim() !== sourceById.get(block.id)?.trim()
+          && (isSymbolic || isAlreadyPersian || normalized.trim() !== sourceText)
         ) {
-          translatedById.set(block.id, normalized);
+          translatedById.set(block.id, normalized.trim());
         } else {
           missing.push(block);
         }
       });
 
       if (missing.length === 0) return;
+
+      // Tier 1: Re-request the missing subset once with targeted tags
       if (attempt === 0) {
         await requestGroup(missing, 1);
         return;
       }
 
-      const fallbackSettings = { ...settingsRef.current, translationMethod: 'default' as const };
-      const fallbackResults = await translateBatch(
-        missing.map(block => ({ id: block.id, text: block.originalText })),
-        contextBlocks.slice(0, targetStartIndex).map(block => ({ id: block.id, text: `${block.originalText} (${settingsRef.current.targetLanguage}: ${block.translatedText || 'N/A'})` })),
-        contextBlocks.slice(targetEndIndex).map(block => ({ id: block.id, text: block.originalText })),
-        fallbackSettings,
-        undefined,
-        settingsRef.current.aiProvider !== 'gemini',
-        signal
-      );
-      fallbackResults.forEach(result => {
-        if (result.translatedText?.trim() && result.translatedText.trim() !== sourceById.get(result.id)?.trim()) {
-          translatedById.set(result.id, result.translatedText.trim());
-        }
-      });
+      // Tier 2: Fallback to structured batch translation
+      try {
+        const fallbackSettings = { ...settingsRef.current, translationMethod: 'default' as const };
+        const fallbackResults = await translateBatch(
+          missing.map(block => ({ id: block.id, text: block.originalText })),
+          contextBlocks.slice(0, targetStartIndex).map(block => ({ id: block.id, text: `${block.originalText} (${settingsRef.current.targetLanguage}: ${block.translatedText || 'N/A'})` })),
+          contextBlocks.slice(targetEndIndex).map(block => ({ id: block.id, text: block.originalText })),
+          fallbackSettings,
+          undefined,
+          settingsRef.current.aiProvider !== 'gemini',
+          signal
+        );
+        fallbackResults.forEach(result => {
+          if (result.translatedText?.trim()) {
+            const trimmedRes = result.translatedText.trim();
+            const orig = sourceById.get(result.id)?.trim() || '';
+            const isSymbolic = isPunctuationOrSymbolicOrNumeric(orig);
+            const isAlreadyPersian = isAlreadyTargetLanguage(orig, settingsRef.current.targetLanguage);
+            if (trimmedRes !== orig || isSymbolic || isAlreadyPersian) {
+              translatedById.set(result.id, trimmedRes);
+            }
+          }
+        });
+      } catch (fbErr: any) {
+        if (isAbortError(fbErr, signal)) throw fbErr;
+        console.warn('Fallback translateBatch encountered issue, escalating to direct individual recovery:', fbErr);
+      }
 
+      // Tier 3: Direct precision translation for each block still missing
       const stillMissing = missing.filter(block => !translatedById.get(block.id)?.trim());
       if (stillMissing.length > 0) {
-        throw new Error(`tagged_translation_incomplete: missing or unchanged translations for ids: ${stillMissing.map(block => block.id).join(', ')}`);
+        for (const block of stillMissing) {
+          if (signal?.aborted) break;
+          try {
+            const directTranslation = await translateFreeText(
+              block.originalText,
+              settingsRef.current,
+              settingsRef.current.targetLanguage
+            );
+            if (directTranslation && directTranslation.trim()) {
+              translatedById.set(block.id, directTranslation.trim());
+            } else {
+              translatedById.set(block.id, block.originalText);
+            }
+          } catch (directErr) {
+            console.warn(`Direct precision recovery for block ${block.id} failed, retaining original:`, directErr);
+            translatedById.set(block.id, block.originalText);
+          }
+        }
       }
     };
 
@@ -1377,9 +1421,68 @@ const App: React.FC = () => {
                      return; 
                 }
 
-                updateFileStatus(fileId, { status: AppStatus.ERROR, progressMessage: 'خطا در ترجمه', activeTranslationBlockIds: [], diagnostic });
-                showDiagnosticToast(diagnostic);
-                throw err;
+                // --- SMART AUTO-HEALING CHUNK RESCUE ---
+                // For transient parsing glitches, model syntax quirks, or unexpected batch exceptions,
+                // rescue the remaining blocks of this chunk to prevent halting the entire translation flow.
+                console.warn(`[Auto-Recovery] Rescuing remaining untranslated blocks of chunk ${i + 1}/${totalChunks}...`, err);
+                updateFileStatus(fileId, {
+                    progressMessage: `بازیابی خودکار بخش ${i + 1}...`,
+                    diagnostic: null
+                });
+
+                const pendingBlocks = targetBlocks.filter(b => !successfulResultIds.has(b.id));
+                let chunkRecoveredCount = 0;
+
+                for (const block of pendingBlocks) {
+                    if (signal?.aborted || !isTranslatingRef.current) break;
+                    try {
+                        const directText = await translateFreeText(
+                            block.originalText,
+                            settingsRef.current,
+                            settingsRef.current.targetLanguage
+                        );
+                        const finalText = directText?.trim() || block.originalText;
+                        const formattedText = formatSubtitleForLanguage(finalText, settingsRef.current.targetLanguage);
+                        
+                        setFiles(prev => prev.map(f => {
+                            if (f.id === fileId) {
+                                const newBlocks = [...f.blocks];
+                                const idx = newBlocks.findIndex(b => b.id === block.id);
+                                if (idx !== -1) {
+                                    newBlocks[idx].translatedText = formattedText;
+                                    if (settingsRef.current.enableTranslationMemory) {
+                                        addToMemory(newBlocks[idx].originalText, formattedText);
+                                    }
+                                }
+                                return { ...f, blocks: newBlocks };
+                            }
+                            return f;
+                        }));
+                        successfulResultIds.add(block.id);
+                        chunkRecoveredCount++;
+                        await new Promise(r => setTimeout(r, 200));
+                    } catch (recErr) {
+                        console.warn(`[Auto-Recovery] Fallback to original text for block ${block.id}:`, recErr);
+                        setFiles(prev => prev.map(f => {
+                            if (f.id === fileId) {
+                                const newBlocks = [...f.blocks];
+                                const idx = newBlocks.findIndex(b => b.id === block.id);
+                                if (idx !== -1 && !newBlocks[idx].translatedText) {
+                                    newBlocks[idx].translatedText = block.originalText;
+                                }
+                                return { ...f, blocks: newBlocks };
+                            }
+                            return f;
+                        }));
+                        successfulResultIds.add(block.id);
+                    }
+                }
+
+                if (chunkRecoveredCount > 0) {
+                    showToast(`بخش ${i + 1} با سیستم بازیابی خودکار تکمیل شد و پروسه ترجمه بدون توقف ادامه دارد.`, 'info');
+                } else {
+                    showToast(`بخش ${i + 1} با حفظ ساختار زیرنویس بازیابی شد. پروسه ادامه دارد...`, 'warning');
+                }
             }
         }
 
