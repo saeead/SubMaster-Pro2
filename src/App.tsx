@@ -13,7 +13,7 @@ import { GlossaryModal } from './components/GlossaryModal';
 import { TextTranslatorModal } from './components/TextTranslatorModal';
 import { Toast, ToastType } from './components/Toast';
 import { SubtitleBlock, AppStatus, BatchRequest, BatchResponse, AppSettings, AdjustmentConfig, StyleConfig, GlossaryItem, SubtitleFile, Modification, TranslationDiagnostic } from './types';
-import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking, estimateTranslationQuality, isPunctuationOrSymbolicOrNumeric, isAlreadyTargetLanguage } from './services/subtitleUtils';
+import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking, estimateTranslationQuality, isPunctuationOrSymbolicOrNumeric, isAlreadyTargetLanguage, cleanAndFilterSubtitleBlocks } from './services/subtitleUtils';
 import { translateBatch, diagnoseConnection, retranslateSelectedBlocks, getTranslationDiagnostic, translateSkeletonPayload, ensureFreshGeminiFlashModels, isAbortError, translateFreeText } from './services/geminiService';
 import { buildSkeletonUserPrompt, extractTranslatedLinesByMarkerIds, normalizeSkeletonPersianHalfSpaces } from './services/methods/skeleton_str';
 import { buildSubtitleTranslatorUserPrompt, extractTranslatedLinesByMarkerIds as extractSubtitleTranslatorLinesByMarkerIds, normalizeSubtitleTranslatorPersianHalfSpaces } from './services/methods/subtitle_translator_strategy';
@@ -263,7 +263,7 @@ const App: React.FC = () => {
       size: f.size,
       type: f.type,
       originalType: f.type,
-      blocks: f.blocks,
+      blocks: cleanAndFilterSubtitleBlocks(f.blocks),
       status: AppStatus.READY,
       progress: 0,
       progressMessage: (isCurrentlyTranslating || isAutoPipelineActive) ? 'در صف ترجمه...' : undefined,
@@ -312,13 +312,14 @@ const App: React.FC = () => {
 
   // Handle Importing a Backup JSON file
   const handleProjectImport = (projectState: ProjectState) => {
+    const sanitizedBlocks = cleanAndFilterSubtitleBlocks(projectState.allBlocks);
     const restoredFile: SubtitleFile = {
         id: projectState.id || crypto.randomUUID(),
         name: projectState.name,
         size: 0, // Not strictly needed for resume
         type: projectState.type,
         originalType: projectState.type,
-        blocks: projectState.allBlocks,
+        blocks: sanitizedBlocks,
         status: projectState.status as AppStatus,
         progress: projectState.progress,
         processedCount: projectState.completedChunks,
@@ -339,7 +340,7 @@ const App: React.FC = () => {
     setActiveFileId(restoredFile.id);
     
     // Save to LS immediately so it sticks
-    ProjectStateManager.saveProjectState(restoredFile.id, projectState);
+    ProjectStateManager.saveProjectState(restoredFile.id, { ...projectState, allBlocks: sanitizedBlocks });
     setSavedProjects(ProjectStateManager.listSavedProjects());
 
     showToast(`پروژه "${projectState.name}" با موفقیت بازیابی شد.`, 'success');
@@ -356,7 +357,7 @@ const App: React.FC = () => {
                 size: 0, // Metadata lost in simple schema, not critical
                 type: pState.type,
                 originalType: pState.type,
-                blocks: pState.allBlocks,
+                blocks: cleanAndFilterSubtitleBlocks(pState.allBlocks),
                 status: pState.status as AppStatus,
                 progress: pState.progress,
                 processedCount: pState.completedChunks,

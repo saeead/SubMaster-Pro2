@@ -51,6 +51,100 @@ export const hexToAssColor = (hex: string, opacity: number = 100): string => {
     return `&H${alphaHex}FFFFFF`;
 };
 
+/**
+ * Strips HTML tags, ASS style tags, HTML entities, invisible characters, and whitespace.
+ */
+export const stripSubtitleFormatting = (text: string): string => {
+  if (!text) return '';
+  return text
+    // Remove ASS tags like {\an8}, {\pos(x,y)}, etc.
+    .replace(/\{[^}]*\}/g, '')
+    // Remove HTML/VTT tags like <font color="...">, <b>, <i>, </u>, <c>, etc.
+    .replace(/<[^>]+>/g, '')
+    // Decode or remove common HTML entities
+    .replace(/&(?:nbsp|#160|#8203|#x200b|zwnj|#8204|zwj|#8205|amp|quot|lt|gt);/gi, ' ')
+    // Remove invisible characters, BOM, LTR/RTL marks
+    .replace(/[\u200B\u200D\u200E\u200F\uFEFF\u00A0\u202A-\u202E\u2066-\u2069]/g, '')
+    .trim();
+};
+
+/**
+ * Checks if a subtitle text contains only music notes, sound cues, or closed-caption non-dialogue markers.
+ */
+export const isNonDialogueAudioCue = (text: string): boolean => {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+
+  // Pure music symbols: ♪, ♫, ♩, ♬, #
+  if (/^[♪♫♩♬#\s\-._~*]+$/u.test(trimmed)) {
+    return true;
+  }
+
+  // Audio descriptions wrapped completely in brackets or parentheses like [Music], (Applause), [Laughter], etc.
+  const bracketMatch = trimmed.match(/^(?:\[|\(|\/\*|\{)([\s\S]*?)(?:\]|\)|\*\/|\})$/);
+  if (bracketMatch) {
+    const inner = bracketMatch[1].trim();
+    if (!inner) return true;
+    if (!/[\p{L}\p{N}]/u.test(inner)) return true;
+    if (/[♪♫♩♬]/.test(inner)) return true;
+    const soundKeywords = /^(?:music|upbeat\s+music|dramatic\s+music|soft\s+music|sad\s+music|gentle\s+music|tense\s+music|suspenseful\s+music|somber\s+music|classical\s+music|rock\s+music|pop\s+music|instrumental(?:\s+music)?|theme(?:\s+song)?|song|singing|vocalizing|applause|cheering|cheers|laughter|laughing|chuckle|snicker|gasp|sigh|sighs|groan|groans|screaming|screams|silence|sound(?:\s+effects?)?|ambient(?:\s+sound)?|crying|sobbing|bell(?:\s+tolls?)?|footsteps?|birds?(?:\s+chirping)?|engine(?:\s+revving)?|gunfire|explosion|coughing|cough|clears?\s+throat|throat\s+clearing|phone\s+rings?|door\s+opens?|door\s+closes?|crowd\s+cheering|muffled\s+speaking|snoring|yawn|whistling|whispering|whispers?|panting|heavy\s+breathing|breathing\s+heavily)$/i;
+    if (soundKeywords.test(inner)) return true;
+  }
+
+  return false;
+};
+
+/**
+ * Validates whether a subtitle line contains real, meaningful spoken or textual dialogue.
+ * Returns FALSE for:
+ * - Empty blocks or whitespace-only (" ")
+ * - Blocks containing only punctuation or symbols ("...", "....", "؟؟؟", "؟ ", "?", "??", "!", "---", etc.)
+ * - Blocks containing only music symbols (♪, ♫) or bracketed audio/sound cues ([Music], (Applause), etc.)
+ * - Blocks where stripping HTML/ASS tags leaves only meaningless punctuation or whitespace.
+ */
+export const isMeaningfulSubtitleText = (rawText: string): boolean => {
+  if (!rawText || typeof rawText !== 'string') return false;
+
+  // 1. Strip styling, ASS tags, HTML tags, invisible characters
+  const stripped = stripSubtitleFormatting(rawText);
+  if (!stripped) return false;
+
+  // 2. Remove speaker prefix if present (e.g. "John: ..." or "[Speaker 1]: ؟؟؟") to inspect dialogue content
+  const withoutSpeaker = stripped.replace(/^(?:\[[^\]]+\]|\([^)]+\)|[A-Za-z0-9_\u0600-\u06FF\s]{1,30}):\s*/, '').trim();
+  const textToEvaluate = withoutSpeaker || stripped;
+
+  // 3. Check for non-dialogue audio / music markers
+  if (isNonDialogueAudioCue(textToEvaluate) || isNonDialogueAudioCue(stripped)) {
+    return false;
+  }
+
+  // 4. Check if there are any letters or numbers in any human script (Latin, Persian/Arabic, CJK, Cyrillic, etc.)
+  // If there are NO letters and NO numbers, it is purely whitespace, punctuation, symbols, dashes, dots, question marks, etc.
+  const hasLettersOrNumbers = /[\p{L}\p{N}]/u.test(textToEvaluate);
+  if (!hasLettersOrNumbers) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Automatically purges all empty, symbolic, or unreasonable punctuation subtitle blocks,
+ * and re-indexes the remaining valid blocks sequentially (1, 2, 3...) so they never load into the editor.
+ */
+export const cleanAndFilterSubtitleBlocks = (blocks: SubtitleBlock[]): SubtitleBlock[] => {
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return [];
+
+  const filtered = blocks.filter(b => b && isMeaningfulSubtitleText(b.originalText));
+
+  // Re-index remaining blocks cleanly to maintain consecutive numbering (1, 2, 3...)
+  return filtered.map((b, idx) => ({
+    ...b,
+    id: idx + 1,
+    index: idx + 1
+  }));
+};
+
 export const parseSRT = (content: string): SubtitleBlock[] => {
   const normalizeLineEndings = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const blocks: SubtitleBlock[] = [];
@@ -66,7 +160,7 @@ export const parseSRT = (content: string): SubtitleBlock[] => {
       translatedText: ''
     });
   }
-  return blocks;
+  return cleanAndFilterSubtitleBlocks(blocks);
 };
 
 export const parseVTT = (content: string): SubtitleBlock[] => {
@@ -88,7 +182,7 @@ export const parseVTT = (content: string): SubtitleBlock[] => {
     });
     indexCounter++;
   }
-  return blocks;
+  return cleanAndFilterSubtitleBlocks(blocks);
 };
 
 export const parseASS = (content: string): SubtitleBlock[] => {
@@ -120,7 +214,7 @@ export const parseASS = (content: string): SubtitleBlock[] => {
           }
       }
   }
-  return blocks;
+  return cleanAndFilterSubtitleBlocks(blocks);
 };
 
 const countWords = (text: string): number => text.trim().split(/\s+/).length;
@@ -177,13 +271,14 @@ export const formatSubtitleForLanguage = (text: string, targetLanguage: TargetLa
 };
 
 export const optimizeSubtitleBlocks = (blocks: SubtitleBlock[], standard: OutputStandard = 'normal'): SubtitleBlock[] => {
-  if (blocks.length === 0) return [];
+  const sanitizedBlocks = cleanAndFilterSubtitleBlocks(blocks);
+  if (sanitizedBlocks.length === 0) return [];
   const config = OPTIMIZATION_CONFIG[standard.toUpperCase() as keyof typeof OPTIMIZATION_CONFIG] || OPTIMIZATION_CONFIG.NORMAL;
   const MAX_DURATION_MS = standard === 'normal' ? 12000 : 7000;
   const optimized: SubtitleBlock[] = [];
-  let bufferBlock: SubtitleBlock = { ...blocks[0] };
-  for (let i = 1; i < blocks.length; i++) {
-    const nextBlock = blocks[i];
+  let bufferBlock: SubtitleBlock = { ...sanitizedBlocks[0] };
+  for (let i = 1; i < sanitizedBlocks.length; i++) {
+    const nextBlock = sanitizedBlocks[i];
     const bufferWords = countWords(bufferBlock.originalText);
     const nextWords = countWords(nextBlock.originalText);
     const totalWords = bufferWords + nextWords;

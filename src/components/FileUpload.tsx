@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import { Plus, Upload, Copy, FileJson } from 'lucide-react';
-import { parseSRT, parseVTT, parseASS, optimizeSubtitleBlocks } from '../services/subtitleUtils';
+import { parseSRT, parseVTT, parseASS, optimizeSubtitleBlocks, cleanAndFilterSubtitleBlocks } from '../services/subtitleUtils';
 import { SubtitleBlock, AppStatus, OutputStandard } from '../types';
 import { APP_CONFIG } from '../constants';
 import { ProjectState } from '../services/projectStateManager';
@@ -64,6 +64,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onLoad, onProjectLoad, s
                 const projectState = JSON.parse(text);
                 // Basic Schema Validation
                 if (projectState.id && projectState.allBlocks && projectState.totalChunks !== undefined) {
+                    projectState.allBlocks = cleanAndFilterSubtitleBlocks(projectState.allBlocks);
                     onProjectLoad(projectState as ProjectState);
                     return; // Stop processing other files if a backup is loaded
                 } else {
@@ -88,6 +89,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onLoad, onProjectLoad, s
         } else {
           blocks = parseSRT(text);
         }
+
+        // Strictly purge empty, symbolic, or unreasonable punctuation blocks right at load time
+        blocks = cleanAndFilterSubtitleBlocks(blocks);
 
         if (blocks.length > 0) {
             // Optimization (Merge short lines, fix timing)
