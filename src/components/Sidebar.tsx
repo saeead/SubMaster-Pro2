@@ -11,7 +11,9 @@ import {
   SlidersHorizontal,
   Shield,
   ChevronLeft,
-  Sparkles
+  Sparkles,
+  Zap,
+  Layers
 } from 'lucide-react';
 import { AppSettings, OutputStandard, TargetLanguage, ToneType, TopicType } from '../types';
 import { TARGET_LANGUAGES, TONE_OPTIONS, TOPIC_OPTIONS } from '../constants';
@@ -24,7 +26,7 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
-  onOpenGlossary: () => void;
+  onOpenGlossary: (tab?: 'list' | 'bulk' | 'auto') => void;
   onOpenTextTranslator: () => void;
 }
 
@@ -219,30 +221,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </p>
           </div>
 
-          {/* Specialized Glossary Quick Access (for educational topic) */}
-          {settings.topic === 'educational' && (
-            <button
-              onClick={onOpenGlossary}
-              type="button"
-              className="group flex min-h-[46px] w-full items-center justify-between rounded-xl border border-border dark:bg-[#141d42] bg-fuchsia-50/50 hover:bg-fuchsia-50 dark:hover:bg-[#182350] px-3.5 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 active:scale-[0.995]"
-            >
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary/20 text-secondary">
-                  <BookOpen className="h-4 w-4" />
+          {/* Specialized Glossary Quick Access */}
+          <button
+            onClick={() => onOpenGlossary('list')}
+            type="button"
+            className="group flex min-h-[46px] w-full items-center justify-between rounded-xl border border-border dark:bg-[#141d42] bg-fuchsia-50/50 hover:bg-fuchsia-50 dark:hover:bg-[#182350] px-3.5 py-2.5 text-sm font-semibold text-text shadow-xs transition-all duration-200 active:scale-[0.995]"
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary/20 text-secondary">
+                <BookOpen className="h-4 w-4" />
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-bold text-text flex items-center gap-1">
+                  <span>واژه‌نامه تخصصی آموزشی</span>
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-500 dark:text-cyan-400 font-bold flex items-center gap-0.5">
+                    <Zap className="w-2.5 h-2.5" />
+                    <span>اتوماتیک</span>
+                  </span>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-text">واژه‌نامه تخصصی آموزشی</div>
-                  <div className="text-[10px] text-text-muted">اصطلاحات و تعاریف معین</div>
+                <div className="text-[10px] text-text-muted flex items-center gap-1">
+                  <span>استخراج خودکار و ترجمه یکدست</span>
+                  {settings.multiFileGlossaryStrategy === 'shared' && (
+                    <span className="text-[9px] px-1 rounded bg-secondary/15 text-secondary font-mono">مشترک</span>
+                  )}
+                  {settings.multiFileGlossaryStrategy === 'separate' && (
+                    <span className="text-[9px] px-1 rounded bg-slate-500/15 text-text-muted font-mono">مجزا</span>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="rounded-full bg-secondary/20 px-2 py-0.5 font-mono text-xs font-bold text-secondary">
-                  {settings.glossary.length}
-                </span>
-                <ChevronLeft className="h-4 w-4 text-text-muted transition-transform group-hover:-translate-x-0.5" />
-              </div>
-            </button>
-          )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="rounded-full bg-secondary/20 px-2 py-0.5 font-mono text-xs font-bold text-secondary">
+                {settings.glossary.length}
+              </span>
+              <ChevronLeft className="h-4 w-4 text-text-muted transition-transform group-hover:-translate-x-0.5" />
+            </div>
+          </button>
 
         </div>
 

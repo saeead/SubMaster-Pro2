@@ -36,6 +36,7 @@ export interface ProjectState {
   status: string;
   progress: number;
   semanticContext?: import('../types').FileSemanticContext;
+  extractedGlossary?: import('../types').GlossaryItem[];
 }
 
 
@@ -70,6 +71,7 @@ export const buildProjectStateFromFile = (file: SubtitleFile): ProjectState => {
     modificationsMade: file.modificationsMade || [],
     lastProcessedIndex: getLastContiguousProcessedIndex(file.blocks),
     semanticContext: file.semanticContext,
+    extractedGlossary: file.extractedGlossary,
     timestamp: new Date().toISOString()
   };
 };

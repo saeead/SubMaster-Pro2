@@ -54,6 +54,19 @@ export interface SubtitleFile {
   // Global Context & Thematic Topic Memory
   semanticContext?: FileSemanticContext;
   isAnalyzingContext?: boolean;
+
+  // Specialized Educational Glossary Extraction
+  extractedGlossary?: GlossaryItem[];
+  isExtractingGlossary?: boolean;
+  glossaryExtractionProgress?: GlossaryExtractionProgress;
+}
+
+export interface GlossaryExtractionProgress {
+  currentChunk: number;
+  totalChunks: number;
+  extractedCount: number;
+  status: 'idle' | 'extracting' | 'completed' | 'error';
+  error?: string;
 }
 
 export interface SectionTopicMemory {
@@ -151,6 +164,8 @@ export interface OpenAICompatibleService {
   model: string;
 }
 
+export type MultiFileGlossaryStrategy = 'shared' | 'separate' | 'ask';
+
 export interface AppSettings {
   tone: ToneType;
   topic: TopicType;
@@ -170,6 +185,8 @@ export interface AppSettings {
   enableGlobalContextAnalysis: boolean; // Analyzes full file on upload & injects thematic section memory
   strictPersianOrthography: boolean; // Enforces Persian Academy spelling, Tanwin, and ZWNJ rules
   glossary: GlossaryItem[];
+  multiFileGlossaryStrategy: MultiFileGlossaryStrategy; // 'shared' (common for all files), 'separate' (per file), or 'ask'
+  autoExtractGlossaryOnQueue: boolean; // Automatically extract terms before translating each file in queue
   doNotTranslateTerms: string;
   theme: 'dark' | 'light';
   targetLanguage: TargetLanguage;

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { SubtitleFile, AppStatus, NetflixError, TranslationMethod } from '../types';
-import { Play, Pause, Download, FileText, Clock, Hash, Timer, HardDrive, Trash2, XCircle, RefreshCw, Settings2, Wand2, Archive, Save, FileJson, Sparkles, SkipForward, Brain } from 'lucide-react';
+import { Play, Pause, Download, FileText, Clock, Hash, Timer, HardDrive, Trash2, XCircle, RefreshCw, Settings2, Wand2, Archive, Save, FileJson, Sparkles, SkipForward, Brain, BookOpen, Zap } from 'lucide-react';
 import { HelpTooltip } from './HelpTooltip';
 
 interface StatsCardProps {
@@ -29,6 +29,7 @@ interface StatsCardProps {
   onToggleGlobalContextAnalysis?: () => void;
   onForceAnalyzeContext?: (fileId?: string) => void;
   isAnalyzingAnyContext?: boolean;
+  onOpenGlossary?: (tab?: 'list' | 'bulk' | 'auto') => void;
 }
 
 export const StatsCard: React.FC<StatsCardProps> = ({ 
@@ -54,7 +55,8 @@ export const StatsCard: React.FC<StatsCardProps> = ({
   enableGlobalContextAnalysis = true,
   onToggleGlobalContextAnalysis,
   onForceAnalyzeContext,
-  isAnalyzingAnyContext = false
+  isAnalyzingAnyContext = false,
+  onOpenGlossary
 }) => {
   const blocks = activeFile.blocks;
   const status = activeFile.status;
@@ -448,6 +450,43 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                     </button>
                 </div>
             )}
+        </div>
+
+        {/* Specialized Educational Glossary Quick Action & Status */}
+        <div className="rounded-2xl border dark:border-white/10 border-slate-200 dark:bg-white/[0.02] bg-white p-3.5 space-y-2 text-xs shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-secondary/15 text-secondary">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-bold text-text flex items-center gap-1.5">
+                  <span>واژه‌نامه تخصصی آموزشی</span>
+                  {activeFile.extractedGlossary && activeFile.extractedGlossary.length > 0 && (
+                    <span className="text-[10px] px-2 py-0.2 rounded-full font-mono bg-secondary/20 text-secondary border border-secondary/30">
+                      {activeFile.extractedGlossary.length} اصطلاح یکدست‌شده
+                    </span>
+                  )}
+                </span>
+                <span className="text-[11px] text-text-muted">
+                  {activeFile.extractedGlossary && activeFile.extractedGlossary.length > 0
+                    ? 'اصطلاحات استخراج‌شده با شروع ترجمه به‌صورت خودکار در واژه‌نامه اعمال خواهند شد.'
+                    : 'استخراج خودکار واژگان تخصصی و یکسان‌سازی ترجمه پیش از شروع ترجمه'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mr-auto">
+              <button
+                type="button"
+                onClick={() => onOpenGlossary?.('auto')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-secondary/30 dark:bg-secondary/10 bg-secondary/5 text-secondary hover:bg-secondary/20 font-bold transition-all shadow-xs"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>{activeFile.extractedGlossary && activeFile.extractedGlossary.length > 0 ? 'مدیریت و استخراج مجدد' : 'استخراج اتوماتیک واژگان'}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {diagnostic && (

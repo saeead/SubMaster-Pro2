@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Cpu, Key, Plus, Trash2, CheckCircle, AlertTriangle, Loader2, Database, ToggleRight, ToggleLeft, ExternalLink, HelpCircle, Activity } from 'lucide-react';
-import { AIProvider, AppSettings, OpenAICompatibleService, UserAPIKey } from '../types';
+import { X, Cpu, Key, Plus, Trash2, CheckCircle, AlertTriangle, Loader2, Database, ToggleRight, ToggleLeft, ExternalLink, HelpCircle, Activity, Layers, Sparkles, BookOpen } from 'lucide-react';
+import { AIProvider, AppSettings, MultiFileGlossaryStrategy, OpenAICompatibleService, UserAPIKey } from '../types';
 import { diagnoseConnection, validateAPIConnection } from '../services/geminiService';
 import { getMemorySize, clearMemory } from '../services/translationMemory';
 import { TARGET_LANGUAGES, APP_CONFIG } from '../constants';
@@ -291,6 +291,78 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                           ریست حافظه و واژه‌نامه
                       </button>
                   )}
+              </div>
+
+              {/* Multi-File Glossary Management Strategy */}
+              <div className="space-y-4">
+                  <h3 className="text-sm text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                      <Layers className="w-4 h-4" />
+                      مدیریت واژه‌نامه در فایل‌های چندگانه
+                  </h3>
+                  
+                  <div className="space-y-2.5">
+                    <label className="text-xs text-text-muted block">
+                      هنگام آپلود و پردازش چندین فایل در صف، واژه‌نامه چگونه رفتار کند؟
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div
+                        onClick={() => updateSettings({ multiFileGlossaryStrategy: 'shared' })}
+                        className={`cursor-pointer p-3 rounded-xl border text-xs flex flex-col gap-1 transition-all ${
+                          (settings.multiFileGlossaryStrategy || 'shared') === 'shared'
+                            ? 'border-cyan-400 dark:bg-cyan-950/30 bg-cyan-50/80 font-bold text-text shadow-xs'
+                            : 'dark:border-white/10 border-slate-200 dark:bg-white/5 bg-slate-50 text-text-muted hover:border-cyan-400/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>واژه‌نامه مشترک برای همه فایل‌ها</span>
+                          {(settings.multiFileGlossaryStrategy || 'shared') === 'shared' && <CheckCircle className="w-3.5 h-3.5 text-cyan-400" />}
+                        </div>
+                        <span className="text-[10px] text-text-muted font-normal">
+                          تضمین ترجمه یکپارچه در کل دوره/فصل
+                        </span>
+                      </div>
+
+                      <div
+                        onClick={() => updateSettings({ multiFileGlossaryStrategy: 'separate' })}
+                        className={`cursor-pointer p-3 rounded-xl border text-xs flex flex-col gap-1 transition-all ${
+                          settings.multiFileGlossaryStrategy === 'separate'
+                            ? 'border-secondary dark:bg-secondary/15 bg-fuchsia-50/80 font-bold text-text shadow-xs'
+                            : 'dark:border-white/10 border-slate-200 dark:bg-white/5 bg-slate-50 text-text-muted hover:border-secondary/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>واژه‌نامه مجزا برای هر فایل</span>
+                          {settings.multiFileGlossaryStrategy === 'separate' && <CheckCircle className="w-3.5 h-3.5 text-secondary" />}
+                        </div>
+                        <span className="text-[10px] text-text-muted font-normal">
+                          ایزولاسیون واژگان هر فایل به تنهایی
+                        </span>
+                      </div>
+                    </div>
+
+                    <div 
+                      onClick={() => updateSettings({ autoExtractGlossaryOnQueue: !settings.autoExtractGlossaryOnQueue })}
+                      className={`cursor-pointer flex items-center justify-between p-3 rounded-xl border transition-all mt-2 ${
+                        settings.autoExtractGlossaryOnQueue
+                          ? 'border-cyan-400/70 dark:bg-cyan-950/20 bg-cyan-50/60'
+                          : 'dark:border-white/10 border-slate-200 dark:bg-white/5 bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex flex-col pr-1">
+                        <span className="text-xs font-bold text-text flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>استخراج اتوماتیک واژگان قبل از ترجمه هر فایل در صف</span>
+                        </span>
+                        <span className="text-[10px] text-text-muted mt-0.5">
+                          در زمان نوبت هر فایل، ابتدا واژگان استخراج، ترجمه و ثبت شده، سپس ترجمه آغاز می‌گردد.
+                        </span>
+                      </div>
+                      <div className={settings.autoExtractGlossaryOnQueue ? 'text-cyan-400' : 'text-text-muted'}>
+                        {settings.autoExtractGlossaryOnQueue ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
+                      </div>
+                    </div>
+                  </div>
               </div>
 
               {/* AI Provider */}

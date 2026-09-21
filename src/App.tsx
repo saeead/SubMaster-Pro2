@@ -10,9 +10,10 @@ import { SettingsModal } from './components/SettingsModal';
 import { TimingModal } from './components/TimingModal';
 import { ExportModal } from './components/ExportModal';
 import { GlossaryModal } from './components/GlossaryModal';
+import { MultiFileGlossaryModal } from './components/MultiFileGlossaryModal';
 import { TextTranslatorModal } from './components/TextTranslatorModal';
 import { Toast, ToastType } from './components/Toast';
-import { SubtitleBlock, AppStatus, BatchRequest, BatchResponse, AppSettings, AdjustmentConfig, StyleConfig, GlossaryItem, SubtitleFile, Modification, TranslationDiagnostic } from './types';
+import { SubtitleBlock, AppStatus, BatchRequest, BatchResponse, AppSettings, AdjustmentConfig, StyleConfig, GlossaryItem, SubtitleFile, Modification, TranslationDiagnostic, MultiFileGlossaryStrategy } from './types';
 import { generateSubtitleFile, downloadFile, smartChunking, getSmartContextWindow, formatSubtitleForLanguage, adjustBlockTiming, validateNetflixStandards, fixNetflixStandards, optimizePersianStructure, paragraphChunking, estimateTranslationQuality, isPunctuationOrSymbolicOrNumeric, isAlreadyTargetLanguage, cleanAndFilterSubtitleBlocks } from './services/subtitleUtils';
 import { translateBatch, diagnoseConnection, retranslateSelectedBlocks, getTranslationDiagnostic, translateSkeletonPayload, ensureFreshGeminiFlashModels, isAbortError, translateFreeText } from './services/geminiService';
 import { buildSkeletonUserPrompt, extractTranslatedLinesByMarkerIds, normalizeSkeletonPersianHalfSpaces } from './services/methods/skeleton_str';
@@ -22,6 +23,7 @@ import ProjectStateManager, { ProjectState, buildProjectStateFromFile } from './
 import { TranslationJobRunner } from './services/translationJobRunner';
 import { SKELETON_STR_CONTEXT_WINDOW, DELAY_BETWEEN_FILES_MS, APP_CONFIG, TOPIC_TEMPERATURE_DEFAULTS, getAdaptiveBatchDelay, getAdaptiveTranslationBatchSize } from './constants';
 import { analyzeGlobalSubtitleContext, getRelevantSectionContext, formatSemanticContextForPrompt } from './services/semanticContextService';
+import { loadFinalFileGlossary, unifyAndDeduplicateGlossary, executeAutomaticGlossaryExtraction, validateGlossaryProviderReady } from './services/glossaryExtractionService';
 import { correctPersianOrthography } from './services/persianOrthography';
 import { Loader2, Check, Wand2, History, ArrowUp, X } from 'lucide-react';
 
@@ -43,6 +45,8 @@ const App: React.FC = () => {
   const [isTimingModalOpen, setIsTimingModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isGlossaryModalOpen, setIsGlossaryModalOpen] = useState(false);
+  const [isMultiFileGlossaryModalOpen, setIsMultiFileGlossaryModalOpen] = useState(false);
+  const [glossaryModalInitialTab, setGlossaryModalInitialTab] = useState<'list' | 'bulk' | 'auto'>('list');
   const [isTranslatorOpen, setIsTranslatorOpen] = useState(false);
   
   const [completionToast, setCompletionToast] = useState<boolean>(false);
@@ -71,7 +75,9 @@ const App: React.FC = () => {
     theme: 'dark',
     targetLanguage: 'fa',
     enableGlobalContextAnalysis: true,
-    strictPersianOrthography: true
+    strictPersianOrthography: true,
+    multiFileGlossaryStrategy: 'ask',
+    autoExtractGlossaryOnQueue: true
   });
 
   // Refs for processing
@@ -132,6 +138,8 @@ const App: React.FC = () => {
         if (!parsed.targetLanguage) parsed.targetLanguage = 'fa';
         if (parsed.enableGlobalContextAnalysis === undefined) parsed.enableGlobalContextAnalysis = true;
         if (parsed.strictPersianOrthography === undefined) parsed.strictPersianOrthography = true;
+        if (!parsed.multiFileGlossaryStrategy) parsed.multiFileGlossaryStrategy = 'ask';
+        if (parsed.autoExtractGlossaryOnQueue === undefined) parsed.autoExtractGlossaryOnQueue = true;
         setSettings(prev => ({ ...prev, ...parsed }));
       } catch (error) {
         console.error('Failed to load settings from local storage:', error);
@@ -444,7 +452,8 @@ const App: React.FC = () => {
         // Restore History if available
         modificationsMade: projectState.modificationsMade || [],
         historyPointer: projectState.modificationsMade ? projectState.modificationsMade.length - 1 : -1,
-        semanticContext: projectState.semanticContext
+        semanticContext: projectState.semanticContext,
+        extractedGlossary: projectState.extractedGlossary
     };
 
     // If importing a completed file, ensure status is reflected
@@ -482,7 +491,8 @@ const App: React.FC = () => {
                 netflixErrors: [],
                 modificationsMade: pState.modificationsMade || [],
                 historyPointer: pState.modificationsMade ? pState.modificationsMade.length - 1 : -1,
-                semanticContext: pState.semanticContext
+                semanticContext: pState.semanticContext,
+                extractedGlossary: pState.extractedGlossary
             });
         }
     });
@@ -1313,10 +1323,20 @@ const App: React.FC = () => {
      updateFileStatus(fileId, { status: AppStatus.TRANSLATING, progressMessage: 'در حال تقسیم‌بندی...', diagnostic: null });
      const startTime = Date.now();
 
-     const isParagraphMethod = settingsRef.current.translationMethod === 'paragraph';
-     const isSkeletonMethod = settingsRef.current.translationMethod === 'skeleton_str' || settingsRef.current.translationMethod === 'subtitle_translator';
-     const isSubtitleTranslatorMethod = settingsRef.current.translationMethod === 'subtitle_translator';
-     const adaptiveBatchSize = getAdaptiveTranslationBatchSize(settingsRef.current.aiProvider, settingsRef.current.model, settingsRef.current.translationMethod);
+     const fileGlossary = (file.extractedGlossary && file.extractedGlossary.length > 0)
+       ? unifyAndDeduplicateGlossary(file.extractedGlossary, settingsRef.current.glossary)
+       : (loadFinalFileGlossary(file.id) && loadFinalFileGlossary(file.id).length > 0)
+         ? unifyAndDeduplicateGlossary(loadFinalFileGlossary(file.id), settingsRef.current.glossary)
+         : settingsRef.current.glossary;
+
+     const effectiveFileSettings: AppSettings = (settingsRef.current.multiFileGlossaryStrategy === 'separate' && fileGlossary && fileGlossary.length > 0)
+       ? { ...settingsRef.current, glossary: fileGlossary }
+       : settingsRef.current;
+
+     const isParagraphMethod = effectiveFileSettings.translationMethod === 'paragraph';
+     const isSkeletonMethod = effectiveFileSettings.translationMethod === 'skeleton_str' || effectiveFileSettings.translationMethod === 'subtitle_translator';
+     const isSubtitleTranslatorMethod = effectiveFileSettings.translationMethod === 'subtitle_translator';
+     const adaptiveBatchSize = getAdaptiveTranslationBatchSize(effectiveFileSettings.aiProvider, effectiveFileSettings.model, effectiveFileSettings.translationMethod);
      const chunks = isParagraphMethod ? paragraphChunking(file.blocks) : smartChunking(file.blocks, adaptiveBatchSize);
      const totalChunks = chunks.length;
 
@@ -1462,7 +1482,7 @@ const App: React.FC = () => {
                         targetRequest, 
                         preContextReq, 
                         postContextReq, 
-                        settingsRef.current, 
+                        effectiveFileSettings, 
                         onKeyRateLimit, 
                         isParagraphMethod, 
                         signal,
@@ -1718,6 +1738,108 @@ const App: React.FC = () => {
         return;
     }
 
+    // Automatic Glossary Extraction & Strategy Check before translation starts
+    if (pendingFiles.length > 1 && settingsRef.current.multiFileGlossaryStrategy === 'ask') {
+      setIsMultiFileGlossaryModalOpen(true);
+      return;
+    }
+
+    if (settingsRef.current.autoExtractGlossaryOnQueue) {
+      const filesNeedingExtraction = pendingFiles.filter(f => 
+        (!f.extractedGlossary || f.extractedGlossary.length === 0) &&
+        (!loadFinalFileGlossary(f.id) || loadFinalFileGlossary(f.id).length === 0)
+      );
+
+      if (filesNeedingExtraction.length > 0) {
+        const providerValidation = validateGlossaryProviderReady(settingsRef.current);
+        if (!providerValidation.ready) {
+          showToast(`⚠️ استخراج واژه‌نامه ممکن نشد: ${providerValidation.error}`, 'error');
+          setIsSettingsOpen(true);
+          return;
+        }
+
+        autoPipelineActiveRef.current = true;
+        isTranslatingRef.current = true;
+
+        for (let idx = 0; idx < filesNeedingExtraction.length; idx++) {
+          const pFile = filesNeedingExtraction[idx];
+          updateFileStatus(pFile.id, {
+            status: AppStatus.TRANSLATING,
+            progressMessage: `استخراج خودکار واژگان تخصصی (${idx + 1} از ${filesNeedingExtraction.length})...`,
+            diagnostic: null
+          });
+
+          try {
+            const result = await executeAutomaticGlossaryExtraction({
+              file: pFile,
+              settings: settingsRef.current,
+              onProgress: (progress) => {
+                updateFileStatus(pFile.id, {
+                  progressMessage: `استخراج واژگان (${idx + 1}/${filesNeedingExtraction.length}): چانک ${progress.currentChunk} از ${progress.totalChunks} (${progress.extractedCount} واژه)`
+                });
+              }
+            });
+
+            if (!result.unifiedGlossary || result.unifiedGlossary.length === 0) {
+              updateFileStatus(pFile.id, {
+                status: AppStatus.ERROR,
+                progressMessage: 'هیچ واژه تخصصی استخراج نشد'
+              });
+              showToast(`خطا در استخراج واژگان برای "${pFile.name}": هیچ واژه‌ای استخراج نشد`, 'error');
+              autoPipelineActiveRef.current = false;
+              isTranslatingRef.current = false;
+              return;
+            }
+
+            setFiles(prev => prev.map(f => f.id === pFile.id ? { ...f, extractedGlossary: result.unifiedGlossary } : f));
+            ProjectStateManager.saveProjectState(pFile.id, buildProjectStateFromFile({ ...pFile, extractedGlossary: result.unifiedGlossary }));
+          } catch (extractionErr: any) {
+            const errorMsg = extractionErr?.message || String(extractionErr);
+            updateFileStatus(pFile.id, {
+              status: AppStatus.ERROR,
+              progressMessage: errorMsg
+            });
+            showToast(`خطا در استخراج واژگان برای "${pFile.name}": ${errorMsg}`, 'error');
+            autoPipelineActiveRef.current = false;
+            isTranslatingRef.current = false;
+            return;
+          }
+        }
+
+        showToast(`✅ استخراج خودکار واژگان تخصصی برای تمام فایل‌ها با موفقیت انجام شد.`, 'success');
+      }
+    }
+
+    // Automatic Glossary Import / Unification before translation starts
+    // Ensures extracted specialized terms are automatically unified and imported according to user's strategy
+    const allPendingExtracted: GlossaryItem[] = [];
+    for (const pFile of filesRef.current) {
+      if (pFile.extractedGlossary && pFile.extractedGlossary.length > 0) {
+        allPendingExtracted.push(...pFile.extractedGlossary);
+      } else {
+        const saved = loadFinalFileGlossary(pFile.id);
+        if (saved && saved.length > 0) {
+          allPendingExtracted.push(...saved);
+        }
+      }
+    }
+
+    if (allPendingExtracted.length > 0 && settingsRef.current.multiFileGlossaryStrategy !== 'separate') {
+      const currentGlossary = settingsRef.current.glossary || [];
+      const mergedGlossary = unifyAndDeduplicateGlossary(allPendingExtracted, currentGlossary);
+      if (mergedGlossary.length > currentGlossary.length) {
+        const newlyImportedCount = mergedGlossary.length - currentGlossary.length;
+        setSettings(prev => {
+          const updated = { ...prev, glossary: mergedGlossary };
+          try {
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
+        showToast(`✨ ${newlyImportedCount} واژه تخصصی استخراج‌شده به‌طور خودکار به واژه‌نامه آموزشی افزوده شد و ترجمه یکپارچه تضمین گردید.`, 'success');
+      }
+    }
+
     const activeFile = filesRef.current.find(f => f.id === activeFileId);
     const targetFile = (activeFile && pendingFiles.some(f => f.id === activeFile.id))
       ? activeFile
@@ -1872,7 +1994,7 @@ const App: React.FC = () => {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onOpenSettings={() => { setIsSettingsOpen(true); setIsSidebarOpen(false); }}
-        onOpenGlossary={() => { setIsGlossaryModalOpen(true); setIsSidebarOpen(false); }}
+        onOpenGlossary={(tab) => { setGlossaryModalInitialTab(tab || 'list'); setIsGlossaryModalOpen(true); setIsSidebarOpen(false); }}
         onOpenTextTranslator={() => { setIsTranslatorOpen(true); setIsSidebarOpen(false); }}
       />
 
@@ -1973,6 +2095,7 @@ const App: React.FC = () => {
                       onToggleGlobalContextAnalysis={handleToggleGlobalContextAnalysis}
                       onForceAnalyzeContext={handleForceAnalyzeContext}
                       isAnalyzingAnyContext={isAnalyzingContextQueue || files.some(f => f.isAnalyzingContext)}
+                      onOpenGlossary={(tab) => { setGlossaryModalInitialTab(tab || 'list'); setIsGlossaryModalOpen(true); }}
                     />
                     <div className="mb-6 glass p-6 rounded-2xl border border-border space-y-3">
                          <label className="text-sm font-bold text-text flex items-center gap-2"><Wand2 className="w-4 h-4 text-secondary" />پرامپت اختصاصی (Custom Prompt)</label>
@@ -2021,7 +2144,42 @@ const App: React.FC = () => {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={settings} updateSettings={updateSettings} />
       <TimingModal isOpen={isTimingModalOpen} onClose={() => setIsTimingModalOpen(false)} onApply={handleTimingAdjustment} onNetflixCheck={handleNetflixCheck} hasMultipleFiles={files.length > 1} />
       <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} onConfirm={(format, styles) => { updateSettings({ outputFormat: format }); handleConfirmDownload(format, styles); }} defaultFormat={settings.outputFormat} />
-      <GlossaryModal isOpen={isGlossaryModalOpen} onClose={() => setIsGlossaryModalOpen(false)} glossary={settings.glossary} onUpdate={handleUpdateGlossary} />
+      <GlossaryModal 
+        isOpen={isGlossaryModalOpen} 
+        onClose={() => setIsGlossaryModalOpen(false)} 
+        glossary={settings.glossary} 
+        onUpdate={handleUpdateGlossary} 
+        activeFile={getActiveFile()}
+        files={files}
+        settings={settings}
+        onSaveExtractedGlossaryToFile={(fileId, extracted) => {
+          setFiles(prev => prev.map(f => f.id === fileId ? { ...f, extractedGlossary: extracted } : f));
+          const target = filesRef.current.find(f => f.id === fileId);
+          if (target) {
+            ProjectStateManager.saveProjectState(fileId, buildProjectStateFromFile({ ...target, extractedGlossary: extracted }));
+          }
+        }}
+        initialTab={glossaryModalInitialTab}
+      />
+      <MultiFileGlossaryModal
+        isOpen={isMultiFileGlossaryModalOpen}
+        onClose={() => setIsMultiFileGlossaryModalOpen(false)}
+        fileCount={files.filter(f => f.blocks.some(b => !b.translatedText || b.translatedText.trim() === '')).length || files.length}
+        onSelectStrategy={(strategy, rememberChoice) => {
+          setIsMultiFileGlossaryModalOpen(false);
+          updateSettings({
+            multiFileGlossaryStrategy: rememberChoice ? strategy : 'ask'
+          });
+          // Update ref immediately so startBatchTranslation picks it up
+          settingsRef.current = {
+            ...settingsRef.current,
+            multiFileGlossaryStrategy: strategy
+          };
+          setTimeout(() => {
+            startBatchTranslation();
+          }, 50);
+        }}
+      />
       <TextTranslatorModal isOpen={isTranslatorOpen} onClose={() => setIsTranslatorOpen(false)} settings={settings} />
        {files.some(f => f.status === AppStatus.TRANSLATING) && (
             <div className="fixed bottom-8 right-8 glass border border-primary/50 text-text px-6 py-4 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.5)] flex items-center gap-4 z-50 animate-in slide-in-from-bottom-10">
