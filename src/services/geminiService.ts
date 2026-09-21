@@ -6,6 +6,7 @@ import { SKELETON_STR_PERSIAN_ORTHOGRAPHY_INSTRUCTION } from "./methods/skeleton
 import { getSubtitleTranslatorSystemInstruction } from "./methods/subtitle_translator_strategy";
 import { filterBatchWithMemory, addBatchToMemory } from "./translationMemory";
 import { getStandardLimits, checkCueStandardCompliance, SubtitleComplianceIssue, estimateTranslationQuality, LightweightQualityDiagnostic } from "./subtitleUtils";
+import { correctPersianOrthography } from "./persianOrthography";
 
 interface GeminiCacheEntry {
   cacheName: string;
@@ -469,7 +470,8 @@ const validateBatchResponse = (targetIds: number[], response: unknown): BatchRes
     if (RAW_MARKER_PATTERN.test(cleanText)) errors.push(`id ${id} contains a raw subtitle marker`);
     if (MARKDOWN_OR_EXPLANATION_PATTERN.test(cleanText)) errors.push(`id ${id} contains markdown or explanatory text`);
 
-    validated.push({ id, translatedText: cleanText });
+    const normalizedText = correctPersianOrthography(cleanText);
+    validated.push({ id, translatedText: normalizedText });
   });
 
   for (let index = 1; index < validated.length; index++) {
@@ -573,7 +575,8 @@ const validateSelectiveBatchResponse = (
       continue;
     }
 
-    validMap.set(id, cleanText);
+    const normalizedText = correctPersianOrthography(cleanText);
+    validMap.set(id, normalizedText);
   }
 
   // Invalidate any IDs that appeared multiple times
@@ -723,7 +726,7 @@ Detected Issues: ${c.issues.join('; ')}`).join('\n\n');
 
 
 
-const getActiveOpenAICompatibleService = (settings: AppSettings): OpenAICompatibleService => {
+export const getActiveOpenAICompatibleService = (settings: AppSettings): OpenAICompatibleService => {
   const activeService = settings.openAICompatibleServices.find(service => service.id === settings.activeOpenAICompatibleServiceId)
     || settings.openAICompatibleServices[0];
   if (!activeService) throw new Error('هیچ سرویس OpenAI Compatible ذخیره نشده است.');
@@ -763,7 +766,7 @@ const shouldFallbackFromProxyResponse = (response: Response): boolean => {
   return !isJson || response.status === 404 || response.status === 405;
 };
 
-const callOpenAICompatibleChat = async (service: OpenAICompatibleService, temperature: number, systemInstruction: string, userPrompt: string, signal?: AbortSignal): Promise<string> => {
+export const callOpenAICompatibleChat = async (service: OpenAICompatibleService, temperature: number, systemInstruction: string, userPrompt: string, signal?: AbortSignal): Promise<string> => {
   const body = {
     model: normalizeOpenAICompatibleModel(service),
     messages: [
@@ -797,7 +800,7 @@ const callOpenAICompatibleChat = async (service: OpenAICompatibleService, temper
   return content;
 };
 
-const callLmStudioChat = async (settings: AppSettings, systemInstruction: string, userPrompt: string, signal?: AbortSignal): Promise<string> => {
+export const callLmStudioChat = async (settings: AppSettings, systemInstruction: string, userPrompt: string, signal?: AbortSignal): Promise<string> => {
   const baseUrl = normalizeLmStudioBaseUrl(settings.lmStudioBaseUrl);
 
   // 1. Dynamic temperature based on settings and tone
@@ -1382,7 +1385,8 @@ export const translateBatch = async (
   settings: AppSettings,
   onKeyRateLimit?: (key: string) => void,
   forceParagraphMode: boolean = false,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  semanticContextPrompt?: string
 ): Promise<BatchResponse[]> => {
   let attempt = 0;
   let validationRetries = 0;
@@ -1465,6 +1469,10 @@ export const translateBatch = async (
         settings.doNotTranslateTerms,
         settings.aiProvider
       );
+
+      if (semanticContextPrompt && semanticContextPrompt.trim()) {
+        userPrompt = `${semanticContextPrompt.trim()}\n\n${userPrompt}`;
+      }
 
       if (validationRetries > 0) {
         userPrompt += `\n\nCRITICAL RETRY NOTICE: Your previous response was REJECTED because it was malformed (invalid JSON, missing IDs, or empty translations).
@@ -2062,7 +2070,8 @@ export const translateFreeText = async (text: string, settings: AppSettings, tar
             safetySettings: SAFETY_SETTINGS,
         },
     });
-    return response.text || '';
+    const result = response.text || '';
+    return targetLang === 'fa' ? correctPersianOrthography(result) : result;
 };
 
 /** Dedicated raw tagged call used only by the opt-in Skeleton STR method. */

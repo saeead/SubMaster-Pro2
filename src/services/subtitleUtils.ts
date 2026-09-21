@@ -1,6 +1,7 @@
 
 import { SubtitleBlock, AdjustmentConfig, NetflixError, VttStyleConfig, StyleConfig, OutputStandard, TargetLanguage } from '../types';
 import { BATCH_SIZE, OVERLAP_SIZE, OPTIMIZATION_CONFIG } from '../constants';
+import { correctPersianOrthography } from './persianOrthography';
 
 // Helper to convert timestamp string to milliseconds
 export const timeToMs = (timeString: string): number => {
@@ -223,7 +224,8 @@ const isSentenceComplete = (text: string): boolean => /[.?!؟!;]['"]?$/.test(tex
 
 export const formatPersianSubtitle = (text: string): string => {
   if (!text) return '';
-  const clean = text.replace(/[\r\n]+/g, ' ').trim();
+  const normalized = correctPersianOrthography(text);
+  const clean = normalized.replace(/[\r\n]+/g, ' ').trim();
   const words = clean.split(/\s+/);
   const wordCount = words.length;
   if (wordCount <= 10) return clean;

@@ -50,6 +50,30 @@ export interface SubtitleFile {
   // Undo/Redo History
   modificationsMade: Modification[];
   historyPointer: number;
+
+  // Global Context & Thematic Topic Memory
+  semanticContext?: FileSemanticContext;
+  isAnalyzingContext?: boolean;
+}
+
+export interface SectionTopicMemory {
+  id: string;
+  startBlockId: number;
+  endBlockId: number;
+  timeRange: string;
+  topicSummary: string;
+  charactersInvolved?: string[];
+  toneOrKeyTerms?: string;
+}
+
+export interface FileSemanticContext {
+  overallSummary: string;
+  detectedGenre: string;
+  detectedTone: string;
+  mainCharacters: string[];
+  suggestedTerminology?: { term: string; suggestedPersian: string }[];
+  sections: SectionTopicMemory[];
+  generatedAt: string;
 }
 
 export interface TranslationStats {
@@ -143,6 +167,8 @@ export interface AppSettings {
   customPrompt: string;
   apiKeys: UserAPIKey[];
   enableTranslationMemory: boolean;
+  enableGlobalContextAnalysis: boolean; // Analyzes full file on upload & injects thematic section memory
+  strictPersianOrthography: boolean; // Enforces Persian Academy spelling, Tanwin, and ZWNJ rules
   glossary: GlossaryItem[];
   doNotTranslateTerms: string;
   theme: 'dark' | 'light';

@@ -21,6 +21,8 @@ import { getFromMemory, addToMemory } from './services/translationMemory';
 import ProjectStateManager, { ProjectState, buildProjectStateFromFile } from './services/projectStateManager'; // Import Manager
 import { TranslationJobRunner } from './services/translationJobRunner';
 import { SKELETON_STR_CONTEXT_WINDOW, DELAY_BETWEEN_FILES_MS, APP_CONFIG, TOPIC_TEMPERATURE_DEFAULTS, getAdaptiveBatchDelay, getAdaptiveTranslationBatchSize } from './constants';
+import { analyzeGlobalSubtitleContext, getRelevantSectionContext, formatSemanticContextForPrompt } from './services/semanticContextService';
+import { correctPersianOrthography } from './services/persianOrthography';
 import { Loader2, Check, Wand2, History, ArrowUp, X } from 'lucide-react';
 
 const SETTINGS_STORAGE_KEY = 'submaster_pro_settings_v1';
@@ -67,7 +69,9 @@ const App: React.FC = () => {
     glossary: [],
     doNotTranslateTerms: '',
     theme: 'dark',
-    targetLanguage: 'fa'
+    targetLanguage: 'fa',
+    enableGlobalContextAnalysis: true,
+    strictPersianOrthography: true
   });
 
   // Refs for processing
@@ -126,6 +130,8 @@ const App: React.FC = () => {
         if (parsed.temperature === undefined) parsed.temperature = 0.7; 
         if (!parsed.theme) parsed.theme = 'dark';
         if (!parsed.targetLanguage) parsed.targetLanguage = 'fa';
+        if (parsed.enableGlobalContextAnalysis === undefined) parsed.enableGlobalContextAnalysis = true;
+        if (parsed.strictPersianOrthography === undefined) parsed.strictPersianOrthography = true;
         setSettings(prev => ({ ...prev, ...parsed }));
       } catch (error) {
         console.error('Failed to load settings from local storage:', error);
@@ -253,6 +259,31 @@ const App: React.FC = () => {
 
   // --- FILE MANAGEMENT ---
 
+  const triggerGlobalContextAnalysis = async (fileId: string) => {
+    if (!settingsRef.current.enableGlobalContextAnalysis) return;
+    const file = filesRef.current.find(f => f.id === fileId);
+    if (!file || file.semanticContext || file.blocks.length === 0) return;
+
+    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, isAnalyzingContext: true } : f));
+    try {
+      const context = await analyzeGlobalSubtitleContext(file, settingsRef.current);
+      setFiles(prev => prev.map(f => {
+        if (f.id === fileId) {
+          return {
+            ...f,
+            semanticContext: context,
+            isAnalyzingContext: false
+          };
+        }
+        return f;
+      }));
+      filesRef.current = filesRef.current.map(f => f.id === fileId ? { ...f, semanticContext: context, isAnalyzingContext: false } : f);
+    } catch (err) {
+      console.warn(`[ContextAnalysis] Error analyzing file ${fileId}:`, err);
+      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, isAnalyzingContext: false } : f));
+    }
+  };
+
   const handleFilesLoaded = (loadedFiles: { blocks: SubtitleBlock[], filename: string, type: 'SRT' | 'VTT' | 'ASS', size: number }[]) => {
     const isCurrentlyTranslating = isTranslatingRef.current;
     const isAutoPipelineActive = autoPipelineActiveRef.current;
@@ -279,6 +310,12 @@ const App: React.FC = () => {
     // Update synchronous ref immediately so running tasks can find the new files without delay
     filesRef.current = [...filesRef.current, ...newFiles];
     setFiles(prev => [...prev, ...newFiles]);
+
+    if (settingsRef.current.enableGlobalContextAnalysis) {
+      newFiles.forEach(f => {
+        triggerGlobalContextAnalysis(f.id);
+      });
+    }
 
     if (activeFileId === null && newFiles.length > 0) {
       setActiveFileId(newFiles[0].id);
@@ -1000,7 +1037,8 @@ const App: React.FC = () => {
     targetStartIndex: number,
     targetEndIndex: number,
     isSubtitleTranslatorMethod: boolean,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    semanticContextPrompt?: string
   ): Promise<BatchResponse[]> => {
     const contextLines = contextBlocks.map(block =>
       block.translatedText
@@ -1031,9 +1069,12 @@ const App: React.FC = () => {
       if (group.length === 0) return;
       const groupIds = group.map(block => block.id);
       const payload = buildSelectivePayload(group);
-      const prompt = isSubtitleTranslatorMethod
+      const basePrompt = isSubtitleTranslatorMethod
         ? buildSubtitleTranslatorUserPrompt(payload, group.length, settingsRef.current.targetLanguage, groupIds)
         : buildSkeletonUserPrompt(payload, group.length, settingsRef.current.targetLanguage, groupIds);
+      const prompt = semanticContextPrompt && semanticContextPrompt.trim()
+        ? `${semanticContextPrompt.trim()}\n\n${basePrompt}`
+        : basePrompt;
       
       let response = '';
       try {
@@ -1050,8 +1091,9 @@ const App: React.FC = () => {
       const missing: SubtitleBlock[] = [];
       extracted.forEach((value, index) => {
         const block = group[index];
+        const halfSpaceCleaned = isSubtitleTranslatorMethod ? normalizeSubtitleTranslatorPersianHalfSpaces(value) : normalizeSkeletonPersianHalfSpaces(value);
         const normalized = value && settingsRef.current.targetLanguage === 'fa'
-          ? (isSubtitleTranslatorMethod ? normalizeSubtitleTranslatorPersianHalfSpaces(value) : normalizeSkeletonPersianHalfSpaces(value))
+          ? correctPersianOrthography(halfSpaceCleaned)
           : value;
         const sourceText = sourceById.get(block.id)?.trim() || '';
         const isSymbolic = isPunctuationOrSymbolicOrNumeric(sourceText);
@@ -1224,6 +1266,21 @@ const App: React.FC = () => {
         }));
      };
 
+     if (settingsRef.current.enableGlobalContextAnalysis) {
+        let currentFileObj = filesRef.current.find(f => f.id === fileId) || file;
+        if (!currentFileObj.semanticContext && currentFileObj.blocks.length > 0) {
+          updateFileStatus(fileId, { progressMessage: 'تحلیل ساختار روایی و موضوعی کل اثر (درک هوشمند کانتکست)...' });
+          try {
+            const context = await analyzeGlobalSubtitleContext(currentFileObj, settingsRef.current, undefined, signal);
+            currentFileObj = { ...currentFileObj, semanticContext: context };
+            filesRef.current = filesRef.current.map(f => f.id === fileId ? currentFileObj : f);
+            setFiles(prev => prev.map(f => f.id === fileId ? currentFileObj : f));
+          } catch (e) {
+            console.warn('[SemanticContext] Pre-translation analysis error:', e);
+          }
+        }
+     }
+
      for (let i = startChunkIndex; i < totalChunks; i++) {
         // Critical: Check if stopped. If stopped via Pause, don't set to Cancelled.
         if (signal?.aborted || !isTranslatingRef.current) {
@@ -1260,10 +1317,15 @@ const App: React.FC = () => {
           preContextBlocks = chunk.blocks.slice(0, chunk.targetStartIndex);
         }
 
+        const targetBlockIds = targetBlocks.map(b => b.id);
+        const relevantContext = getRelevantSectionContext(currentFile.semanticContext, targetBlockIds);
+        const semanticContextPrompt = formatSemanticContextForPrompt(relevantContext);
+
+        const sceneTopicInfo = relevantContext?.sectionSummary ? ` | 🎬 ${relevantContext.sectionSummary}` : '';
         const blockRangeMessage = targetBlocks.length > 0
             ? `بلوک‌های ${targetBlocks[0].index} تا ${targetBlocks[targetBlocks.length - 1].index}`
             : 'بدون بلوک هدف';
-        updateFileStatus(fileId, { progressMessage: `پردازش بخش ${i + 1} از ${totalChunks} (${blockRangeMessage})...`, diagnostic: null, activeTranslationBlockIds: targetBlocks.map(block => block.id) });
+        updateFileStatus(fileId, { progressMessage: `پردازش بخش ${i + 1} از ${totalChunks} (${blockRangeMessage})${sceneTopicInfo}...`, diagnostic: null, activeTranslationBlockIds: targetBlocks.map(block => block.id) });
 
         let cachedCount = 0;
         if (settingsRef.current.enableTranslationMemory) {
@@ -1304,9 +1366,26 @@ const App: React.FC = () => {
 
                 const results = await (isSkeletonMethod
                     ? (() => {
-                        return translateTaggedBatchWithRecovery(effectiveTarget, taggedContextBlocks, taggedTargetStartIndex, taggedTargetEndIndex, isSubtitleTranslatorMethod, signal);
+                        return translateTaggedBatchWithRecovery(
+                          effectiveTarget, 
+                          taggedContextBlocks, 
+                          taggedTargetStartIndex, 
+                          taggedTargetEndIndex, 
+                          isSubtitleTranslatorMethod, 
+                          signal,
+                          semanticContextPrompt
+                        );
                       })()
-                    : translateBatch(targetRequest, preContextReq, postContextReq, settingsRef.current, onKeyRateLimit, isParagraphMethod, signal));
+                    : translateBatch(
+                        targetRequest, 
+                        preContextReq, 
+                        postContextReq, 
+                        settingsRef.current, 
+                        onKeyRateLimit, 
+                        isParagraphMethod, 
+                        signal,
+                        semanticContextPrompt
+                      ));
 
                 results.filter(res => !!res.translatedText?.trim()).forEach(res => successfulResultIds.add(res.id));
                 setFiles(prev => prev.map(f => {

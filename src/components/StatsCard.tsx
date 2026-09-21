@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { SubtitleFile, AppStatus, NetflixError, TranslationMethod } from '../types';
-import { Play, Pause, Download, FileText, Clock, Hash, Timer, HardDrive, Trash2, XCircle, RefreshCw, Settings2, Wand2, Archive, Save, FileJson, Sparkles, SkipForward } from 'lucide-react';
+import { Play, Pause, Download, FileText, Clock, Hash, Timer, HardDrive, Trash2, XCircle, RefreshCw, Settings2, Wand2, Archive, Save, FileJson, Sparkles, SkipForward, Brain } from 'lucide-react';
 import { HelpTooltip } from './HelpTooltip';
 
 interface StatsCardProps {
@@ -265,6 +265,39 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                     </div>
                     </div>
                 </div>
+            </div>
+        )}
+
+        {activeFile.isAnalyzingContext && (
+            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-3.5 animate-pulse">
+                <div className="flex items-center gap-2.5 text-xs text-cyan-400">
+                    <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" />
+                    <span>در حال مطالعهٔ اثر، درک هوشمند موضوع و ساخت حافظهٔ معنایی روایی...</span>
+                </div>
+            </div>
+        )}
+
+        {activeFile.semanticContext && (
+            <div className="rounded-2xl border dark:border-cyan-500/20 border-cyan-500/30 dark:bg-cyan-950/20 bg-cyan-50/50 p-3.5 text-xs transition-all">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/15 text-cyan-500 font-bold border border-cyan-500/25">
+                            <Brain className="w-3.5 h-3.5" />
+                            <span>{activeFile.semanticContext.detectedGenre || 'درک موضوعی اثر'}</span>
+                        </span>
+                        {activeFile.semanticContext.detectedTone && (
+                            <span className="px-2 py-0.5 rounded-md dark:bg-white/5 bg-slate-200 text-text-muted">
+                                لحن: {activeFile.semanticContext.detectedTone}
+                            </span>
+                        )}
+                    </div>
+                    <span className="text-[11px] text-text-muted">
+                        🧠 {activeFile.semanticContext.sections.length} بخش موضوعی در حافظه
+                    </span>
+                </div>
+                <p className="text-text-muted leading-relaxed line-clamp-2">
+                    {activeFile.semanticContext.overallSummary}
+                </p>
             </div>
         )}
 
