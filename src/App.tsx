@@ -257,32 +257,114 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // --- FILE MANAGEMENT ---
+  // --- SEQUENTIAL SEMANTIC CONTEXT ANALYSIS QUEUE ---
+  const semanticQueueRef = useRef<string[]>([]);
+  const isProcessingSemanticQueueRef = useRef<boolean>(false);
+  const [isAnalyzingContextQueue, setIsAnalyzingContextQueue] = useState(false);
 
-  const triggerGlobalContextAnalysis = async (fileId: string) => {
-    if (!settingsRef.current.enableGlobalContextAnalysis) return;
-    const file = filesRef.current.find(f => f.id === fileId);
-    if (!file || file.semanticContext || file.blocks.length === 0) return;
+  const processNextInSemanticQueue = async () => {
+    if (isProcessingSemanticQueueRef.current) return;
+    if (semanticQueueRef.current.length === 0) {
+      setIsAnalyzingContextQueue(false);
+      return;
+    }
 
-    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, isAnalyzingContext: true } : f));
+    isProcessingSemanticQueueRef.current = true;
+    setIsAnalyzingContextQueue(true);
+
     try {
-      const context = await analyzeGlobalSubtitleContext(file, settingsRef.current);
-      setFiles(prev => prev.map(f => {
-        if (f.id === fileId) {
-          return {
-            ...f,
-            semanticContext: context,
-            isAnalyzingContext: false
-          };
+      while (semanticQueueRef.current.length > 0) {
+        const nextFileId = semanticQueueRef.current.shift()!;
+        const currentFile = filesRef.current.find(f => f.id === nextFileId);
+        if (!currentFile || currentFile.blocks.length === 0) continue;
+
+        // Mark this specific file as analyzing
+        setFiles(prev => prev.map(f => f.id === nextFileId ? { ...f, isAnalyzingContext: true } : f));
+        filesRef.current = filesRef.current.map(f => f.id === nextFileId ? { ...f, isAnalyzingContext: true } : f);
+
+        try {
+          const context = await analyzeGlobalSubtitleContext(currentFile, settingsRef.current);
+          
+          setFiles(prev => prev.map(f => {
+            if (f.id === nextFileId) {
+              const updated = { ...f, semanticContext: context, isAnalyzingContext: false };
+              try {
+                ProjectStateManager.saveProjectState(nextFileId, buildProjectStateFromFile(updated));
+              } catch (e) {
+                console.warn('Failed to auto-save project state for context:', e);
+              }
+              return updated;
+            }
+            return f;
+          }));
+          
+          filesRef.current = filesRef.current.map(f => f.id === nextFileId ? { ...f, semanticContext: context, isAnalyzingContext: false } : f);
+          showToast(`حافظهٔ روایی و درک موضوعی فایل «${currentFile.name}» با موفقیت ساخته شد.`, 'success');
+        } catch (err) {
+          console.warn(`[SemanticQueue] Error analyzing file ${nextFileId}:`, err);
+          setFiles(prev => prev.map(f => f.id === nextFileId ? { ...f, isAnalyzingContext: false } : f));
+          filesRef.current = filesRef.current.map(f => f.id === nextFileId ? { ...f, isAnalyzingContext: false } : f);
         }
-        return f;
-      }));
-      filesRef.current = filesRef.current.map(f => f.id === fileId ? { ...f, semanticContext: context, isAnalyzingContext: false } : f);
-    } catch (err) {
-      console.warn(`[ContextAnalysis] Error analyzing file ${fileId}:`, err);
-      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, isAnalyzingContext: false } : f));
+
+        // Delay between files to prevent provider rate limits
+        if (semanticQueueRef.current.length > 0) {
+          await new Promise(r => setTimeout(r, 600));
+        }
+      }
+    } finally {
+      isProcessingSemanticQueueRef.current = false;
+      setIsAnalyzingContextQueue(false);
     }
   };
+
+  const enqueueSequentialContextAnalysis = (fileIds: string[], forceReanalyze = false) => {
+    const validIds = fileIds.filter(id => {
+      const f = filesRef.current.find(item => item.id === id);
+      if (!f || f.blocks.length === 0) return false;
+      if (forceReanalyze) return true;
+      return !f.semanticContext;
+    });
+
+    if (validIds.length === 0) return;
+
+    validIds.forEach(id => {
+      if (!semanticQueueRef.current.includes(id)) {
+        semanticQueueRef.current.push(id);
+      }
+    });
+
+    processNextInSemanticQueue();
+  };
+
+  const handleToggleGlobalContextAnalysis = () => {
+    const nextState = !settings.enableGlobalContextAnalysis;
+    updateSettings({ enableGlobalContextAnalysis: nextState });
+
+    if (nextState) {
+      showToast('تحلیل موضوعی کل اثر فعال شد. فایل‌ها به نوبت تحلیل می‌شوند...', 'info');
+      const pendingFileIds = filesRef.current.map(f => f.id);
+      enqueueSequentialContextAnalysis(pendingFileIds, false);
+    } else {
+      showToast('تحلیل موضوعی کل اثر غیرفعال شد.', 'warning');
+      semanticQueueRef.current = [];
+    }
+  };
+
+  const handleForceAnalyzeContext = (fileId?: string) => {
+    if (!settings.enableGlobalContextAnalysis) {
+      updateSettings({ enableGlobalContextAnalysis: true });
+    }
+    const targetIds = fileId ? [fileId] : filesRef.current.map(f => f.id);
+    showToast(
+      targetIds.length === 1 
+        ? 'تحلیل اجباری و ساخت حافظهٔ روایی آغاز شد...' 
+        : `تحلیل اجباری و نوبتی ${targetIds.length} فایل آغاز شد...`,
+      'info'
+    );
+    enqueueSequentialContextAnalysis(targetIds, true);
+  };
+
+  // --- FILE MANAGEMENT ---
 
   const handleFilesLoaded = (loadedFiles: { blocks: SubtitleBlock[], filename: string, type: 'SRT' | 'VTT' | 'ASS', size: number }[]) => {
     const isCurrentlyTranslating = isTranslatingRef.current;
@@ -312,9 +394,7 @@ const App: React.FC = () => {
     setFiles(prev => [...prev, ...newFiles]);
 
     if (settingsRef.current.enableGlobalContextAnalysis) {
-      newFiles.forEach(f => {
-        triggerGlobalContextAnalysis(f.id);
-      });
+      enqueueSequentialContextAnalysis(newFiles.map(f => f.id));
     }
 
     if (activeFileId === null && newFiles.length > 0) {
@@ -363,7 +443,8 @@ const App: React.FC = () => {
         netflixErrors: [],
         // Restore History if available
         modificationsMade: projectState.modificationsMade || [],
-        historyPointer: projectState.modificationsMade ? projectState.modificationsMade.length - 1 : -1
+        historyPointer: projectState.modificationsMade ? projectState.modificationsMade.length - 1 : -1,
+        semanticContext: projectState.semanticContext
     };
 
     // If importing a completed file, ensure status is reflected
@@ -400,7 +481,8 @@ const App: React.FC = () => {
                 processedCount: pState.completedChunks,
                 netflixErrors: [],
                 modificationsMade: pState.modificationsMade || [],
-                historyPointer: pState.modificationsMade ? pState.modificationsMade.length - 1 : -1
+                historyPointer: pState.modificationsMade ? pState.modificationsMade.length - 1 : -1,
+                semanticContext: pState.semanticContext
             });
         }
     });
@@ -1887,12 +1969,37 @@ const App: React.FC = () => {
                       onSave={handleManualSave} 
                       onExportBackup={handleExportProjectFile} 
                       onOptimizeStructure={handleOptimizePersianStructure} 
+                      enableGlobalContextAnalysis={settings.enableGlobalContextAnalysis}
+                      onToggleGlobalContextAnalysis={handleToggleGlobalContextAnalysis}
+                      onForceAnalyzeContext={handleForceAnalyzeContext}
+                      isAnalyzingAnyContext={isAnalyzingContextQueue || files.some(f => f.isAnalyzingContext)}
                     />
                     <div className="mb-6 glass p-6 rounded-2xl border border-border space-y-3">
                          <label className="text-sm font-bold text-text flex items-center gap-2"><Wand2 className="w-4 h-4 text-secondary" />پرامپت اختصاصی (Custom Prompt)</label>
                          <textarea value={settings.customPrompt} onChange={(e) => updateSettings({ customPrompt: e.target.value })} placeholder="دستورالعمل خاصی دارید؟ اینجا بنویسید..." className="w-full dark:bg-[#0a0e27]/60 bg-white text-sm text-text placeholder-text-muted focus:outline-none resize-none h-24 rounded-xl p-4 border dark:border-white/10 border-slate-200 focus:border-secondary/60 transition-all shadow-xs" dir="auto" />
                     </div>
-                    <SubtitleEditor blocks={getActiveFile().blocks} onUpdateBlock={(id, text, field) => activeFileId && updateBlock(activeFileId, id, text, field)} validationErrors={getActiveFile().netflixErrors} onFindReplace={handleFindReplace} hasMultipleFiles={files.length > 1} onCommitChange={handleCommitChange} onUndo={handleUndo} onRedo={handleRedo} canUndo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer > -1} canRedo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer < getActiveFile().modificationsMade.length - 1} onRetranslateSelected={handleRetranslateSelectedBlocks} onAutoFixSelected={handleAutoFixSelectedBlocks} onDeleteSelected={handleDeleteSelectedBlocks} isRetranslatingSelection={isRetranslatingSelection} activeTranslationBlockIds={getActiveFile().activeTranslationBlockIds || []} />
+                    <SubtitleEditor 
+                      blocks={getActiveFile().blocks} 
+                      onUpdateBlock={(id, text, field) => activeFileId && updateBlock(activeFileId, id, text, field)} 
+                      validationErrors={getActiveFile().netflixErrors} 
+                      onFindReplace={handleFindReplace} 
+                      hasMultipleFiles={files.length > 1} 
+                      onCommitChange={handleCommitChange} 
+                      onUndo={handleUndo} 
+                      onRedo={handleRedo} 
+                      canUndo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer > -1} 
+                      canRedo={!!getActiveFile()?.modificationsMade && getActiveFile().historyPointer < getActiveFile().modificationsMade.length - 1} 
+                      onRetranslateSelected={handleRetranslateSelectedBlocks} 
+                      onAutoFixSelected={handleAutoFixSelectedBlocks} 
+                      onDeleteSelected={handleDeleteSelectedBlocks} 
+                      isRetranslatingSelection={isRetranslatingSelection} 
+                      activeTranslationBlockIds={getActiveFile().activeTranslationBlockIds || []} 
+                      enableGlobalContextAnalysis={settings.enableGlobalContextAnalysis}
+                      onToggleGlobalContextAnalysis={handleToggleGlobalContextAnalysis}
+                      onForceAnalyzeContext={() => activeFileId && handleForceAnalyzeContext(activeFileId)}
+                      semanticContext={getActiveFile().semanticContext}
+                      isAnalyzingContext={getActiveFile().isAnalyzingContext || false}
+                    />
                 </>
             )}
         </main>

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { SubtitleBlock, NetflixError } from '../types';
-import { Clock, AlertTriangle, Search, Replace, ArrowLeft, Layers, Undo, Redo, CheckSquare, Square, Languages, X, Loader2, Wand2, Trash2, ChevronsDown, ChevronsUp, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { SubtitleBlock, NetflixError, FileSemanticContext } from '../types';
+import { Clock, AlertTriangle, Search, Replace, ArrowLeft, Layers, Undo, Redo, CheckSquare, Square, Languages, X, Loader2, Wand2, Trash2, ChevronsDown, ChevronsUp, ChevronLeft, ChevronRight, Check, Brain, RefreshCw } from 'lucide-react';
 
 interface SubtitleEditorProps {
   blocks: SubtitleBlock[];
@@ -21,6 +21,13 @@ interface SubtitleEditorProps {
   onDeleteSelected: (ids: number[]) => void;
   isRetranslatingSelection?: boolean;
   activeTranslationBlockIds?: number[];
+
+  // Semantic Analysis Props
+  enableGlobalContextAnalysis?: boolean;
+  onToggleGlobalContextAnalysis?: () => void;
+  onForceAnalyzeContext?: () => void;
+  semanticContext?: FileSemanticContext;
+  isAnalyzingContext?: boolean;
 }
 
 export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({ 
@@ -38,7 +45,12 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   onAutoFixSelected,
   onDeleteSelected,
   isRetranslatingSelection = false,
-  activeTranslationBlockIds = []
+  activeTranslationBlockIds = [],
+  enableGlobalContextAnalysis = true,
+  onToggleGlobalContextAnalysis,
+  onForceAnalyzeContext,
+  semanticContext,
+  isAnalyzingContext = false
 }) => {
   const [findTerm, setFindTerm] = useState('');
   const [replaceTerm, setReplaceTerm] = useState('');
@@ -265,6 +277,98 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   return (
     <div className="space-y-6 pb-20">
       
+      {/* Global Semantic Analysis Bar in Editor */}
+      <div className={`p-4 rounded-2xl border transition-all flex flex-wrap items-center justify-between gap-3 ${
+        enableGlobalContextAnalysis
+          ? 'dark:border-cyan-500/25 border-cyan-500/35 dark:bg-cyan-950/20 bg-cyan-50/60 shadow-xs'
+          : 'dark:border-white/10 border-slate-200 dark:bg-white/[0.02] bg-slate-50 opacity-80'
+      }`}>
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-xl border ${
+            enableGlobalContextAnalysis
+              ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
+              : 'bg-slate-500/10 border-slate-500/20 text-text-muted'
+          }`}>
+            <Brain className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-sm text-text">تحلیل موضوعی و فایل حافظه روایی:</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                enableGlobalContextAnalysis
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                  : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+              }`}>
+                {enableGlobalContextAnalysis ? 'فعال (اجباری نوبتی)' : 'غیرفعال'}
+              </span>
+            </div>
+            
+            <div className="text-xs text-text-muted mt-1">
+              {isAnalyzingContext ? (
+                <span className="flex items-center gap-1.5 text-cyan-500 dark:text-cyan-400 animate-pulse font-medium">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  در حال مطالعه سناریو، درک روابط شخصیت‌ها و ساخت فایل حافظه...
+                </span>
+              ) : semanticContext ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-cyan-600 dark:text-cyan-400 font-semibold">
+                    ژانر: {semanticContext.detectedGenre || 'شناسایی‌شده'}
+                  </span>
+                  {semanticContext.detectedTone && (
+                    <span className="opacity-80">• لحن: {semanticContext.detectedTone}</span>
+                  )}
+                  <span>• {semanticContext.sections.length} سکانس در حافظه ضبط شده است</span>
+                </div>
+              ) : (
+                <span className="text-amber-600 dark:text-amber-400">
+                  فایل حافظه موضوعی برای این زیرنویس تشکیل نشده است.
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 mr-auto">
+          {enableGlobalContextAnalysis && !semanticContext && !isAnalyzingContext && (
+            <button
+              type="button"
+              onClick={onForceAnalyzeContext}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition-all shadow-xs"
+            >
+              <Brain className="w-3.5 h-3.5" />
+              <span>تحلیل فوری این فایل</span>
+            </button>
+          )}
+
+          {enableGlobalContextAnalysis && semanticContext && (
+            <button
+              type="button"
+              onClick={onForceAnalyzeContext}
+              disabled={isAnalyzingContext}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border dark:border-white/10 border-slate-200 dark:bg-white/5 bg-white text-xs text-text-muted hover:text-text hover:border-cyan-500/40 transition-all disabled:opacity-50"
+              title="تحلیل مجدد سناریوی فایل جاری"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>تحلیل مجدد</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onToggleGlobalContextAnalysis}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold text-xs transition-all shadow-xs ${
+              enableGlobalContextAnalysis
+                ? 'bg-cyan-500/15 border-cyan-500/35 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/25'
+                : 'bg-slate-200 dark:bg-white/10 border-slate-300 dark:border-white/15 text-text-muted hover:text-text'
+            }`}
+            title={enableGlobalContextAnalysis ? 'غیرفعال کردن تحلیل موضوعی' : 'فعال کردن و تحلیل نوبتی فایل‌ها'}
+          >
+            <div className={`w-2.5 h-2.5 rounded-full ${enableGlobalContextAnalysis ? 'bg-cyan-400 shadow-[0_0_6px_rgba(0,240,255,0.8)]' : 'bg-slate-400'}`} />
+            <span>{enableGlobalContextAnalysis ? 'غیرفعال کردن' : 'فعال کردن'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Find & Replace Tool Bar */}
       <div className="glass rounded-2xl p-6 border border-[#00f0ff]/20 animate-in fade-in slide-in-from-top-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">

@@ -20,9 +20,10 @@ export const generateCompactSubtitleTranscript = (blocks: SubtitleBlock[]): stri
   header += `• بازه زمانی کل: ${firstBlock.startTime} الی ${lastBlock.endTime}\n\n`;
   header += `## متن پیوسته دیالوگ‌ها و رویدادها (پیوست با ایندکس و زمان‌بندی):\n`;
 
-  // If blocks <= 500, we include all cues directly
-  // If blocks > 500, we can still comfortably pass up to 1500 cues to Gemini Flash (huge context window)
-  const maxCuesToInclude = 1200;
+  // If blocks <= 600, we include all cues directly.
+  // For larger files, uniformly sample up to 600 cues across the entire timeline
+  // for ultra-fast, low-latency script understanding.
+  const maxCuesToInclude = 600;
   const selectedBlocks = blocks.length <= maxCuesToInclude
     ? blocks
     : sampleRepresentativeBlocks(blocks, maxCuesToInclude);
@@ -163,34 +164,66 @@ Analyze this transcript now and return the comprehensive JSON semantic context b
     }
 
     // Default: Gemini
-    const availableKeyObj = settings.apiKeys.find(k => !k.isRateLimited && k.isValid !== false && k.key.trim().length > 0) || settings.apiKeys[0];
-    const resolvedKey = apiKey || availableKeyObj?.key?.trim();
-    if (!resolvedKey) {
+    const availableKeys = settings.apiKeys.filter(k => k.isValid !== false && !k.isRateLimited && k.key.trim().length > 0);
+    const keyPool = apiKey
+      ? [{ key: apiKey.trim(), isRateLimited: false }]
+      : (availableKeys.length > 0 ? availableKeys : settings.apiKeys.filter(k => k.key && k.key.trim().length > 0));
+
+    if (keyPool.length === 0) {
       console.warn('[SemanticContext] No Gemini API key available; using heuristic context.');
       return createDefaultHeuristicContext(blocks, file.name);
     }
 
-    const ai = createGeminiClient(resolvedKey);
-    const modelName = getResolvedGeminiModel(settings.model);
+    const baseModel = getResolvedGeminiModel(settings.model);
+    const modelChain = [baseModel, 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash'];
+    const uniqueModels = Array.from(new Set(modelChain));
 
-    signal?.throwIfAborted();
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: userPrompt,
-      config: {
-        systemInstruction,
-        temperature: 0.3, // Lower temperature for stable, factual scene breakdown
-        responseMimeType: "application/json"
+    let lastError: any = null;
+
+    // Loop through keys and models with intelligent backoff
+    for (let kIndex = 0; kIndex < keyPool.length; kIndex++) {
+      const currentKey = keyPool[kIndex].key.trim();
+      const ai = createGeminiClient(currentKey);
+
+      for (let mIndex = 0; mIndex < uniqueModels.length; mIndex++) {
+        const modelName = uniqueModels[mIndex];
+        try {
+          signal?.throwIfAborted();
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: userPrompt,
+            config: {
+              systemInstruction,
+              temperature: 0.25,
+              responseMimeType: "application/json"
+            }
+          });
+
+          signal?.throwIfAborted();
+          if (response.text && response.text.trim().length > 0) {
+            const parsed = parseSemanticJsonResponse(response.text, blocks, file.name);
+            return parsed;
+          }
+        } catch (err: any) {
+          if (signal?.aborted) throw err;
+          lastError = err;
+          const msg = (err?.message || '').toLowerCase();
+          if (msg.includes('429')) {
+            console.warn(`[SemanticContext] Key ...${currentKey.slice(-4)} rate limited (429), trying next key...`);
+            break; // Try next key
+          }
+          if (msg.includes('503') || msg.includes('overloaded') || msg.includes('high demand') || msg.includes('unavailable')) {
+            console.warn(`[SemanticContext] Model ${modelName} overloaded (503), switching to next model...`);
+            await new Promise(r => setTimeout(r, 600));
+            continue; // Try next model
+          }
+          console.warn(`[SemanticContext] Model ${modelName} error:`, err);
+        }
       }
-    });
-
-    signal?.throwIfAborted();
-    if (!response.text) {
-      throw new Error('Empty response from model during semantic context analysis');
     }
 
-    const parsed = parseSemanticJsonResponse(response.text, blocks, file.name);
-    return parsed;
+    console.warn('[SemanticContext] AI model analysis could not complete after trying available keys/models. Falling back to guaranteed intelligent heuristic memory:', lastError);
+    return createDefaultHeuristicContext(blocks, file.name);
   } catch (error: any) {
     if (signal?.aborted) throw error;
     console.warn('[SemanticContext] AI analysis failed, falling back to heuristic outline:', error);

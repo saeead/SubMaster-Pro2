@@ -35,6 +35,7 @@ export interface ProjectState {
   allBlocks: SubtitleBlock[];
   status: string;
   progress: number;
+  semanticContext?: import('../types').FileSemanticContext;
 }
 
 
@@ -68,6 +69,7 @@ export const buildProjectStateFromFile = (file: SubtitleFile): ProjectState => {
     apiKeyUsed: '',
     modificationsMade: file.modificationsMade || [],
     lastProcessedIndex: getLastContiguousProcessedIndex(file.blocks),
+    semanticContext: file.semanticContext,
     timestamp: new Date().toISOString()
   };
 };
